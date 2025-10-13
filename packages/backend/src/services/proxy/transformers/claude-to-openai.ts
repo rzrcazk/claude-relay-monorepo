@@ -47,34 +47,7 @@ export class ClaudeToOpenAITransformer implements Transformer {
       baseURL: this.baseURL,
       // 添加更详细的错误处理配置
       maxRetries: 2,
-      timeout: 60000, // 60秒超时
-      // 添加自定义 HTTP Agent 以调试响应
-      httpAgent: undefined, // 在 Cloudflare Workers 中不使用
-      fetch: async (url: RequestInfo | URL, init?: RequestInit) => {
-        console.log('🌐 自定义 fetch 拦截:', { url, method: init?.method })
-
-        try {
-          const response = await fetch(url, init)
-          console.log('📥 收到 HTTP 响应:', {
-            status: response.status,
-            statusText: response.statusText,
-            headers: Object.fromEntries(response.headers.entries()),
-            url: response.url
-          })
-
-          // 尝试读取响应体
-          if (!response.ok) {
-            const errorText = await response.text()
-            console.error('❌ HTTP 错误响应体:', errorText)
-            throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`)
-          }
-
-          return response
-        } catch (error) {
-          console.error('❌ Fetch 请求失败:', error)
-          throw error
-        }
-      }
+      timeout: 60000 // 60秒超时
     })
   }
 
