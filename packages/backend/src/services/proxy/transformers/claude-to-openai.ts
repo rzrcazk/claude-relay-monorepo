@@ -44,8 +44,37 @@ export class ClaudeToOpenAITransformer implements Transformer {
     this.baseURL = options.baseUrl
     this.client = new OpenAI({
       apiKey,
-      baseURL: this.baseURL
-      // 使用 OpenAI SDK 默认配置：10分钟超时，2次重试
+      baseURL: this.baseURL,
+      // 添加更详细的错误处理配置
+      maxRetries: 2,
+      timeout: 60000, // 60秒超时
+      // 添加自定义 HTTP Agent 以调试响应
+      httpAgent: undefined, // 在 Cloudflare Workers 中不使用
+      fetch: async (url: RequestInfo | URL, init?: RequestInit) => {
+        console.log('🌐 自定义 fetch 拦截:', { url, method: init?.method })
+
+        try {
+          const response = await fetch(url, init)
+          console.log('📥 收到 HTTP 响应:', {
+            status: response.status,
+            statusText: response.statusText,
+            headers: Object.fromEntries(response.headers.entries()),
+            url: response.url
+          })
+
+          // 尝试读取响应体
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error('❌ HTTP 错误响应体:', errorText)
+            throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`)
+          }
+
+          return response
+        } catch (error) {
+          console.error('❌ Fetch 请求失败:', error)
+          throw error
+        }
+      }
     })
   }
 
@@ -78,12 +107,50 @@ export class ClaudeToOpenAITransformer implements Transformer {
     } else {
       // 非流式响应
       const params = this.buildNonStreamingParams(claudeRequest, model)
-      
-      const response = await client.chat.completions.create(params)      
-      
-      const claudeResponse = this.transformResponse(response)
-      
-      return claudeResponse
+
+      console.log('🔍 发送 OpenAI API 请求:', {
+        url: `${this.baseURL}/chat/completions`,
+        model,
+        params: {
+          ...params,
+          // 不记录敏感的 API key
+        }
+      })
+
+      try {
+        const response = await client.chat.completions.create(params)
+
+        console.log('🔍 收到 OpenAI API 原始响应:', {
+          response,
+          responseType: typeof response,
+          hasChoices: !!response?.choices,
+          choicesLength: response?.choices?.length,
+          hasId: !!response?.id,
+          hasModel: !!response?.model,
+          hasUsage: !!response?.usage,
+          stringifiedResponse: JSON.stringify(response, null, 2)
+        })
+
+        // 如果响应为空或格式不正确，���出详细错误
+        if (!response || typeof response !== 'object') {
+          throw new Error(`API 响应格式错误: 期望对象，收到 ${typeof response}`)
+        }
+
+        const claudeResponse = this.transformResponse(response)
+        return claudeResponse
+      } catch (error) {
+        console.error('❌ OpenAI API 请求失败:', {
+          error: error instanceof Error ? error.message : String(error),
+          errorStack: error instanceof Error ? error.stack : undefined,
+          url: `${this.baseURL}/chat/completions`,
+          model,
+          params: {
+            ...params,
+            // 不记录敏感的 API key
+          }
+        })
+        throw error
+      }
     }
   }
 
