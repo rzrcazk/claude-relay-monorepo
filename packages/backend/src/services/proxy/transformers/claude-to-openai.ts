@@ -47,7 +47,12 @@ export class ClaudeToOpenAITransformer implements Transformer {
       baseURL: this.baseURL,
       // 添加更详细的错误处理配置
       maxRetries: 2,
-      timeout: 60000 // 60秒超时
+      timeout: 60000, // 60秒超时
+      // 添加默认 headers 以确保兼容性
+      defaultHeaders: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
     })
   }
 
@@ -81,47 +86,177 @@ export class ClaudeToOpenAITransformer implements Transformer {
       // 非流式响应
       const params = this.buildNonStreamingParams(claudeRequest, model)
 
-      console.log('🔍 发送 OpenAI API 请求:', {
-        url: `${this.baseURL}/chat/completions`,
-        model,
-        params: {
-          ...params,
-          // 不记录敏感的 API key
-        }
-      })
+      // Cloudflare Workers 优化日志 - 结构化输出
+    console.log(`=== OpenAI API 请求开始 [${new Date().toISOString()}] ===`)
+    console.log('📤 请求详情:', JSON.stringify({
+      url: `${this.baseURL}/chat/completions`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer [REDACTED]',
+        'User-Agent': 'OpenAI/NodeJS'
+      },
+      body: {
+        model: params.model,
+        messages: params.messages ? {
+          count: params.messages.length,
+          preview: params.messages.map((msg, i) => ({
+            index: i,
+            role: msg.role,
+            contentLength: typeof msg.content === 'string' ? msg.content.length : JSON.stringify(msg.content).length,
+            contentPreview: typeof msg.content === 'string' ? msg.content.substring(0, 100) + (msg.content.length > 100 ? '...' : '') : `[${typeof msg.content}]`
+          }))
+        } : null,
+        max_tokens: params.max_tokens,
+        temperature: params.temperature,
+        top_p: params.top_p,
+        stop: params.stop,
+        tools: params.tools ? {
+          count: params.tools.length,
+          tools: params.tools.map(tool => ({
+            type: tool.type,
+            functionName: tool.function.name,
+            descriptionLength: tool.function.description?.length || 0
+          }))
+        } : null,
+        tool_choice: params.tool_choice,
+        stream: false
+      }
+    }, null, 2))
+    console.log('=== 请求发送 ===')
 
       try {
         const response = await client.chat.completions.create(params)
 
-        console.log('🔍 收到 OpenAI API 原始响应:', {
-          response,
-          responseType: typeof response,
-          hasChoices: !!response?.choices,
-          choicesLength: response?.choices?.length,
-          hasId: !!response?.id,
-          hasModel: !!response?.model,
-          hasUsage: !!response?.usage,
-          stringifiedResponse: JSON.stringify(response, null, 2)
-        })
+        // Cloudflare Workers 优化响应日志
+        console.log(`=== OpenAI API 响应接收 [${new Date().toISOString()}] ===`)
+        console.log('📥 响应元数据:', JSON.stringify({
+          id: response?.id || 'MISSING',
+          object: response?.object || 'MISSING',
+          created: response?.created || 'MISSING',
+          model: response?.model || 'MISSING',
+          system_fingerprint: response?.system_fingerprint || null
+        }, null, 2))
 
-        // 如果响应为空或格式不正确，���出详细错误
+        console.log('📋 Choices 结构分析:', JSON.stringify({
+          choicesExists: !!response?.choices,
+          choicesType: Array.isArray(response?.choices) ? 'array' : typeof response?.choices,
+          choicesLength: response?.choices?.length || 0,
+          firstChoiceExists: !!(response?.choices?.[0]),
+          firstChoiceStructure: response?.choices?.[0] ? {
+            index: response.choices[0].index,
+            finish_reason: response.choices[0].finish_reason,
+            hasMessage: !!response.choices[0].message,
+            messageRole: response.choices[0].message?.role,
+            hasContent: !!response.choices[0].message?.content,
+            contentType: typeof response.choices[0].message?.content,
+            contentLength: response.choices[0].message?.content ?
+              (typeof response.choices[0].message.content === 'string' ?
+                response.choices[0].message.content.length :
+                JSON.stringify(response.choices[0].message.content).length) : 0,
+            hasToolCalls: !!response.choices[0].message?.tool_calls,
+            toolCallsCount: response.choices[0].message?.tool_calls?.length || 0
+          } : null
+        }, null, 2))
+
+        console.log('📊 Usage 信息:', JSON.stringify({
+          usageExists: !!response?.usage,
+          prompt_tokens: response?.usage?.prompt_tokens || 0,
+          completion_tokens: response?.usage?.completion_tokens || 0,
+          total_tokens: response?.usage?.total_tokens || 0
+        }, null, 2))
+
+        console.log('🔍 完整响应对象 (前500字符):', JSON.stringify(response).substring(0, 500))
+        console.log('=== 响应分析完成 ===')
+
+        // 如果响应为空或格式不正确，抛出详细错误
         if (!response || typeof response !== 'object') {
           throw new Error(`API 响应格式错误: 期望对象，收到 ${typeof response}`)
         }
 
+        // 检查 choices 数组 - Cloudflare Workers 优化错误日志
+        if (!response.choices) {
+          console.error('=== CRITICAL ERROR: Choices 属性缺失 ===')
+          console.error('🚨 错误详情:', JSON.stringify({
+            error: 'CHOICES_PROPERTY_MISSING',
+            timestamp: new Date().toISOString(),
+            responseKeys: Object.keys(response),
+            responseType: typeof response,
+            responsePreview: JSON.stringify(response).substring(0, 1000),
+            fullResponse: response
+          }, null, 2))
+          throw new Error(`API 响应无效: 缺少 choices 属性 [${new Date().toISOString()}]`)
+        }
+
+        if (!Array.isArray(response.choices)) {
+          console.error('=== CRITICAL ERROR: Choices 不是数组 ===')
+          console.error('🚨 错误详情:', JSON.stringify({
+            error: 'CHOICES_NOT_ARRAY',
+            timestamp: new Date().toISOString(),
+            choicesValue: response.choices,
+            choicesType: typeof response.choices,
+            isArray: Array.isArray(response.choices),
+            responseKeys: Object.keys(response)
+          }, null, 2))
+          throw new Error(`API 响应无效: choices 不是数组，类型: ${typeof response.choices} [${new Date().toISOString()}]`)
+        }
+
+        if (response.choices.length === 0) {
+          console.error('=== CRITICAL ERROR: Choices 数组为空 ===')
+          console.error('🚨 错误详情:', JSON.stringify({
+            error: 'CHOICES_ARRAY_EMPTY',
+            timestamp: new Date().toISOString(),
+            choicesLength: 0,
+            choices: response.choices,
+            responseId: response.id,
+            responseModel: response.model,
+            hasUsage: !!response.usage,
+            fullResponse: response
+          }, null, 2))
+          throw new Error(`API 响应无效: choices 数组为空 [${new Date().toISOString()}]`)
+        }
+
+        // 转换成功 - 记录转换结果
+        console.log(`=== Claude 格式转换成功 [${new Date().toISOString()}] ===`)
         const claudeResponse = this.transformResponse(response)
+
+        console.log('📤 转换后的 Claude 响应:', JSON.stringify({
+          id: claudeResponse.id,
+          type: claudeResponse.type,
+          role: claudeResponse.role,
+          model: claudeResponse.model,
+          contentCount: claudeResponse.content?.length || 0,
+          hasTextContent: claudeResponse.content?.some(c => c.type === 'text') || false,
+          hasToolUse: claudeResponse.content?.some(c => c.type === 'tool_use') || false,
+          stopReason: claudeResponse.stop_reason,
+          usage: claudeResponse.usage
+        }, null, 2))
+        console.log('=== 转换完成，返回响应 ===')
+
         return claudeResponse
       } catch (error) {
-        console.error('❌ OpenAI API 请求失败:', {
-          error: error instanceof Error ? error.message : String(error),
+        // Cloudflare Workers 优化错误日志
+        console.error(`=== OpenAI API 请求异常 [${new Date().toISOString()}] ===`)
+        console.error('🚨 异常详情:', JSON.stringify({
+          errorType: error.constructor.name,
+          errorMessage: error instanceof Error ? error.message : String(error),
           errorStack: error instanceof Error ? error.stack : undefined,
-          url: `${this.baseURL}/chat/completions`,
-          model,
-          params: {
-            ...params,
-            // 不记录敏感的 API key
-          }
-        })
+          timestamp: new Date().toISOString(),
+          request: {
+            url: `${this.baseURL}/chat/completions`,
+            model: model,
+            paramSummary: {
+              hasMessages: !!params.messages,
+              messagesCount: params.messages?.length || 0,
+              maxTokens: params.max_tokens,
+              temperature: params.temperature,
+              hasTools: !!params.tools,
+              toolsCount: params.tools?.length || 0
+            }
+          },
+          errorClassification: this.classifyError(error)
+        }, null, 2))
+        console.error('=== 异常处理完成 ===')
         throw error
       }
     }
@@ -159,7 +294,7 @@ export class ClaudeToOpenAITransformer implements Transformer {
     }
 
     // 基础参数转换
-    if (claudeRequest.max_tokens) params.max_completion_tokens = claudeRequest.max_tokens
+    if (claudeRequest.max_tokens) params.max_tokens = claudeRequest.max_tokens
     if (claudeRequest.temperature !== undefined) params.temperature = claudeRequest.temperature
     if (claudeRequest.top_p !== undefined) params.top_p = claudeRequest.top_p
     if (claudeRequest.stop_sequences) {
@@ -625,5 +760,108 @@ export class ClaudeToOpenAITransformer implements Transformer {
    */
   private createSSEEvent(event: string, data: Record<string, any>): string {
     return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+  }
+
+  /**
+   * 错误分类 - Cloudflare Workers 优化
+   */
+  private classifyError(error: any): Record<string, any> {
+    const message = error instanceof Error ? error.message : String(error)
+    const lowerMessage = message.toLowerCase()
+
+    // 网络相关错误
+    if (lowerMessage.includes('timeout') || lowerMessage.includes('etimedout')) {
+      return {
+        category: 'NETWORK',
+        type: 'TIMEOUT',
+        severity: 'HIGH',
+        description: '请求超时'
+      }
+    }
+
+    if (lowerMessage.includes('enotfound') || lowerMessage.includes('fetch')) {
+      return {
+        category: 'NETWORK',
+        type: 'CONNECTION',
+        severity: 'HIGH',
+        description: '网络连接失败'
+      }
+    }
+
+    // 认证相关错误
+    if (lowerMessage.includes('unauthorized') || lowerMessage.includes('401') || lowerMessage.includes('authentication')) {
+      return {
+        category: 'AUTH',
+        type: 'INVALID_KEY',
+        severity: 'HIGH',
+        description: 'API 密钥无效或过期'
+      }
+    }
+
+    if (lowerMessage.includes('forbidden') || lowerMessage.includes('403') || lowerMessage.includes('permission')) {
+      return {
+        category: 'AUTH',
+        type: 'PERMISSION',
+        severity: 'HIGH',
+        description: '权限不足'
+      }
+    }
+
+    // 配额相关错误
+    if (lowerMessage.includes('quota') || lowerMessage.includes('rate') || lowerMessage.includes('429')) {
+      return {
+        category: 'QUOTA',
+        type: 'RATE_LIMIT',
+        severity: 'MEDIUM',
+        description: '请求频率超限或配额不足'
+      }
+    }
+
+    if (lowerMessage.includes('insufficient') || lowerMessage.includes('balance')) {
+      return {
+        category: 'QUOTA',
+        type: 'BALANCE',
+        severity: 'MEDIUM',
+        description: '账户余额不足'
+      }
+    }
+
+    // 模型相关错误
+    if (lowerMessage.includes('model') || lowerMessage.includes('not found') || lowerMessage.includes('404')) {
+      return {
+        category: 'MODEL',
+        type: 'NOT_FOUND',
+        severity: 'MEDIUM',
+        description: '模型不存在或不可用'
+      }
+    }
+
+    // 参数相关错误
+    if (lowerMessage.includes('parameter') || lowerMessage.includes('validation') || lowerMessage.includes('400')) {
+      return {
+        category: 'PARAMETER',
+        type: 'INVALID',
+        severity: 'MEDIUM',
+        description: '请求参数无效'
+      }
+    }
+
+    // 服务器错误
+    if (lowerMessage.includes('server') || lowerMessage.includes('500') || lowerMessage.includes('502') || lowerMessage.includes('503')) {
+      return {
+        category: 'SERVER',
+        type: 'INTERNAL',
+        severity: 'HIGH',
+        description: '服务器内部错误'
+      }
+    }
+
+    // 默认分类
+    return {
+      category: 'UNKNOWN',
+      type: 'UNCLASSIFIED',
+      severity: 'MEDIUM',
+      description: '未知错误类型'
+    }
   }
 }
