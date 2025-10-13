@@ -288,8 +288,38 @@ export class ClaudeToOpenAITransformer implements Transformer {
    * 转换 OpenAI 响应为 Claude 格式
    */
   private transformResponse(response: ChatCompletion): Message {
+    // 验证响应结构
+    if (!response.choices || response.choices.length === 0) {
+      console.error('❌ OpenAI API 响应缺少 choices 数组:', {
+        id: response.id,
+        object: response.object,
+        created: response.created,
+        model: response.model,
+        choices: response.choices,
+        usage: response.usage
+      })
+      throw new Error(`API 响应无效: choices 数组为空。模型: ${response.model}, 响应 ID: ${response.id}`)
+    }
+
     const choice = response.choices[0]
+    if (!choice) {
+      console.error('❌ OpenAI API choices[0] 为空:', {
+        choices: response.choices,
+        response
+      })
+      throw new Error('API 响应无效: choice 对象为空')
+    }
+
     const content: any[] = []
+
+    // 验证 message 对象
+    if (!choice.message) {
+      console.error('❌ OpenAI API choice.message 为空:', {
+        choice,
+        response
+      })
+      throw new Error('API 响应无效: choice.message 对象为空')
+    }
 
     // 处理文本内容
     if (choice.message.content) {
@@ -302,6 +332,11 @@ export class ClaudeToOpenAITransformer implements Transformer {
     // 处理工具调用
     if (choice.message.tool_calls) {
       for (const toolCall of choice.message.tool_calls) {
+        if (!toolCall.function) {
+          console.warn('⚠️ 工具调用缺少 function 对象:', toolCall)
+          continue
+        }
+
         content.push({
           type: 'tool_use',
           id: toolCall.id, // 直接使用 OpenAI ID
@@ -315,7 +350,7 @@ export class ClaudeToOpenAITransformer implements Transformer {
       id: `msg_${Date.now()}`,
       type: 'message',
       role: 'assistant',
-      model: response.model,
+      model: response.model || 'unknown',
       content,
       stop_reason: this.mapFinishReason(choice.finish_reason),
       stop_sequence: null,
@@ -362,8 +397,16 @@ export class ClaudeToOpenAITransformer implements Transformer {
               messageStarted = true
             }
 
+            if (!chunk.choices || chunk.choices.length === 0) {
+              console.warn('⚠️ 流式响应缺少 choices 数组:', { chunk })
+              continue
+            }
+
             const choice = chunk.choices[0]
-            if (!choice) continue
+            if (!choice) {
+              console.warn('⚠️ 流式响应 choices[0] 为空:', { choices: chunk.choices })
+              continue
+            }
 
             // 处理文本内容
             if (choice.delta.content) {
