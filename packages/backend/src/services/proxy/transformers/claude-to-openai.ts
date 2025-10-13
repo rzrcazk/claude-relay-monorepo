@@ -100,7 +100,7 @@ export class ClaudeToOpenAITransformer implements Transformer {
         model: params.model,
         messages: params.messages ? {
           count: params.messages.length,
-          preview: params.messages.map((msg, i) => ({
+          preview: params.messages.map((msg: any, i: number) => ({
             index: i,
             role: msg.role,
             contentLength: typeof msg.content === 'string' ? msg.content.length : JSON.stringify(msg.content).length,
@@ -113,7 +113,7 @@ export class ClaudeToOpenAITransformer implements Transformer {
         stop: params.stop,
         tools: params.tools ? {
           count: params.tools.length,
-          tools: params.tools.map(tool => ({
+          tools: params.tools.map((tool: any) => ({
             type: tool.type,
             functionName: tool.function.name,
             descriptionLength: tool.function.description?.length || 0
@@ -226,19 +226,19 @@ export class ClaudeToOpenAITransformer implements Transformer {
           role: claudeResponse.role,
           model: claudeResponse.model,
           contentCount: claudeResponse.content?.length || 0,
-          hasTextContent: claudeResponse.content?.some(c => c.type === 'text') || false,
-          hasToolUse: claudeResponse.content?.some(c => c.type === 'tool_use') || false,
+          hasTextContent: claudeResponse.content?.some((c: any) => c.type === 'text') || false,
+          hasToolUse: claudeResponse.content?.some((c: any) => c.type === 'tool_use') || false,
           stopReason: claudeResponse.stop_reason,
           usage: claudeResponse.usage
         }, null, 2))
         console.log('=== 转换完成，返回响应 ===')
 
         return claudeResponse
-      } catch (error) {
+      } catch (error: unknown) {
         // Cloudflare Workers 优化错误日志
         console.error(`=== OpenAI API 请求异常 [${new Date().toISOString()}] ===`)
         console.error('🚨 异常详情:', JSON.stringify({
-          errorType: error.constructor.name,
+          errorType: error instanceof Error ? error.constructor.name : 'Unknown',
           errorMessage: error instanceof Error ? error.message : String(error),
           errorStack: error instanceof Error ? error.stack : undefined,
           timestamp: new Date().toISOString(),
