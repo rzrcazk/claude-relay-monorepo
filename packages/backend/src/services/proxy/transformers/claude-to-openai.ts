@@ -169,6 +169,27 @@ export class ClaudeToOpenAITransformer implements Transformer {
         console.log('🔍 完整响应对象 (前500字符):', JSON.stringify(response).substring(0, 500))
         console.log('=== 响应分析完成 ===')
 
+        // 检查第三方 API 非标准响应格式
+        if (response && typeof response === 'object' &&
+            ('status' in response) && ('msg' in response)) {
+          console.error('=== 第三方 API 错误响应 ===')
+          console.error('🚨 错误响应:', JSON.stringify({
+            status: response.status,
+            message: response.msg,
+            body: response.body,
+            model: model,
+            provider: this.baseURL
+          }, null, 2))
+
+          // 根据常见的错误状态码提供友好错误
+          const status = String(response.status)
+          if (status === '435' || response.msg === 'Model not support') {
+            throw new Error(`模型 ${model} 不被当前供应商支持。请检查模型名称或更换供应商/模型。 [供应商: ${new URL(this.baseURL).hostname}]`)
+          }
+
+          throw new Error(`供应商 API 错误: ${response.msg} (状态码: ${response.status})`)
+        }
+
         // 如果响应为空或格式不正确，抛出详细错误
         if (!response || typeof response !== 'object') {
           throw new Error(`API 响应格式错误: 期望对象，收到 ${typeof response}`)
@@ -833,6 +854,16 @@ export class ClaudeToOpenAITransformer implements Transformer {
         type: 'NOT_FOUND',
         severity: 'MEDIUM',
         description: '模型不存在或不可用'
+      }
+    }
+
+    // 特殊的第三方 API 格式错误
+    if (lowerMessage.includes('model not support') || lowerMessage.includes('不支持') || lowerMessage.includes('435')) {
+      return {
+        category: 'MODEL',
+        type: 'NOT_SUPPORTED',
+        severity: 'HIGH',
+        description: '模型不被当前供应商支持'
       }
     }
 
