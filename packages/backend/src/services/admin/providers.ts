@@ -2,10 +2,11 @@
  * 模型供应商管理服务
  */
 
-import { ModelProvider, AddProviderRequest, EditProviderRequest } from '../../../../../shared/types/admin/providers'
+import { ModelProvider, AddProviderRequest, EditProviderRequest, TestConnectionRequest, TestConnectionResponse, TestVisionRequest, TestVisionResponse } from '../../../../../shared/types/admin/providers'
 import { HTTPException } from 'hono/http-exception'
 import { KeyPoolManager } from '../key-pool'
 import { ProviderRepository, ModelRepository, RouteConfigRepository } from '../../repositories'
+import { transformerRegistry } from '../proxy/transformers'
 
 export class ProviderService {
   private keyPoolManager: KeyPoolManager
@@ -127,12 +128,12 @@ export class ProviderService {
 
     for (const config of routeConfigs) {
       const { rules } = config
-      
+
       // 检查所有可能的路由规则
       const targets = [
         rules.default,
         rules.longContext,
-        rules.background, 
+        rules.background,
         rules.think,
         rules.webSearch
       ].filter((target): target is NonNullable<typeof target> => target != null)
@@ -144,5 +145,260 @@ export class ProviderService {
     }
 
     return usedRoutes
+  }
+
+  /**
+   * 测试供应商连通性
+   */
+  async testConnection(providerId: string, request: TestConnectionRequest): Promise<TestConnectionResponse> {
+    const provider = await this.providerRepo.getById(providerId)
+    if (!provider) {
+      throw new HTTPException(404, { message: '供应商不存在' })
+    }
+
+    // 获取 Key Pool
+    const pool = await this.keyPoolManager.getOrCreatePool(providerId, provider.type)
+    const keys = await pool.getKeys()
+    const activeKeys = keys.filter(k => k.status === 'active')
+
+    if (activeKeys.length === 0) {
+      return {
+        success: false,
+        latency: 0,
+        message: '没有可用的 API Key',
+        error: 'NO_KEYS'
+      }
+    }
+
+    // 使用第一个活跃的 key
+    const apiKey = activeKeys[0]
+    const startTime = Date.now()
+
+    try {
+      // 构建简单的测试请求
+      const testMessages = [{ role: 'user' as const, content: 'Hi' }]
+
+      // 根据供应商类型调用不同的 API
+      let response: Response
+      if (provider.type === 'gemini') {
+        // Gemini 使用 Google Generative AI SDK
+        response = await this.callGeminiApi(provider, apiKey.key, request.model, testMessages)
+      } else {
+        // OpenAI 兼容的 API (包括 MiniMax)
+        response = await this.callOpenAIApi(provider, apiKey.key, request.model, testMessages)
+      }
+
+      const latency = Date.now() - startTime
+
+      if (response.ok) {
+        return {
+          success: true,
+          latency,
+          message: '连接成功'
+        }
+      } else {
+        const errorText = await response.text()
+        return {
+          success: false,
+          latency,
+          message: `请求失败: ${response.status}`,
+          error: errorText.substring(0, 200)
+        }
+      }
+    } catch (error) {
+      const latency = Date.now() - startTime
+      return {
+        success: false,
+        latency,
+        message: `请求异常: ${error instanceof Error ? error.message : '未知错误'}`,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  /**
+   * 测试供应商图片识别能力
+   */
+  async testVision(providerId: string, request: TestVisionRequest): Promise<TestVisionResponse> {
+    const provider = await this.providerRepo.getById(providerId)
+    if (!provider) {
+      throw new HTTPException(404, { message: '供应商不存在' })
+    }
+
+    // 获取 Key Pool
+    const pool = await this.keyPoolManager.getOrCreatePool(providerId, provider.type)
+    const keys = await pool.getKeys()
+    const activeKeys = keys.filter(k => k.status === 'active')
+
+    if (activeKeys.length === 0) {
+      return {
+        success: false,
+        latency: 0,
+        message: '没有可用的 API Key',
+        visionSupported: false,
+        error: 'NO_KEYS'
+      }
+    }
+
+    const apiKey = activeKeys[0]
+    const startTime = Date.now()
+
+    try {
+      // 构建带图片的测试请求
+      // 使用一个简单的 base64 编码的 1x1 透明 PNG 图片
+      const testImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+
+      const testMessages = [
+        {
+          role: 'user' as const,
+          content: [
+            { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/png' as const, data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' } },
+            { type: 'text' as const, text: 'What do you see?' }
+          ]
+        }
+      ]
+
+      let response: Response
+      if (provider.type === 'gemini') {
+        response = await this.callGeminiApi(provider, apiKey.key, request.model, testMessages, true)
+      } else {
+        response = await this.callOpenAIApi(provider, apiKey.key, request.model, testMessages, true)
+      }
+
+      const latency = Date.now() - startTime
+
+      if (response.ok) {
+        const responseText = await response.text()
+        // 检查响应是否包含有效内容（而非错误信息）
+        const visionSupported = responseText.length > 10 && !responseText.toLowerCase().includes('error')
+        return {
+          success: true,
+          latency,
+          message: visionSupported ? '图片识别能力正常' : 'API 返回异常响应',
+          visionSupported
+        }
+      } else {
+        const errorText = await response.text()
+        // 检查是否是模型不支持图片的错误
+        const visionSupported = false
+        const isModelNotSupport = errorText.toLowerCase().includes('not support') ||
+                                   errorText.toLowerCase().includes('vision') ||
+                                   errorText.toLowerCase().includes('image')
+        return {
+          success: false,
+          latency,
+          message: isModelNotSupport ? '模型不支持图片识别' : `请求失败: ${response.status}`,
+          visionSupported,
+          error: errorText.substring(0, 200)
+        }
+      }
+    } catch (error) {
+      const latency = Date.now() - startTime
+      return {
+        success: false,
+        latency,
+        message: `请求异常: ${error instanceof Error ? error.message : '未知错误'}`,
+        visionSupported: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  /**
+   * 调用 OpenAI 兼容 API
+   */
+  private async callOpenAIApi(
+    provider: ModelProvider,
+    apiKey: string,
+    model: string,
+    messages: any[],
+    isVision: boolean = false
+  ): Promise<Response> {
+    // 构建请求体
+    const body: any = {
+      model,
+      messages
+    }
+
+    // 如果是 vision 请求且需要设置 max_tokens
+    if (isVision) {
+      body.max_tokens = 300
+    }
+
+    const response = await fetch(`${provider.endpoint}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify(body)
+    })
+
+    return response
+  }
+
+  /**
+   * 调用 Gemini API
+   */
+  private async callGeminiApi(
+    provider: ModelProvider,
+    apiKey: string,
+    model: string,
+    messages: any[],
+    isVision: boolean = false
+  ): Promise<Response> {
+    // Gemini API 格式不同于 OpenAI
+    // 构建 contents 格式
+    const contents: any[] = []
+
+    for (const msg of messages) {
+      if (msg.role === 'user' && Array.isArray(msg.content)) {
+        for (const content of msg.content) {
+          if (content.type === 'text') {
+            contents.push({
+              role: 'user',
+              parts: [{ text: content.text }]
+            })
+          } else if (content.type === 'image' && content.source?.type === 'base64') {
+            contents.push({
+              role: 'user',
+              parts: [{
+                inlineData: {
+                  mimeType: content.source.media_type,
+                  data: content.source.data
+                }
+              }]
+            })
+          }
+        }
+      } else if (msg.role === 'user' && typeof msg.content === 'string') {
+        contents.push({
+          role: 'user',
+          parts: [{ text: msg.content }]
+        })
+      }
+    }
+
+    // 使用 v1beta 接口
+    const geminiModel = model.startsWith('gemini-') ? model : `models/${model}`
+    const url = `${provider.endpoint.replace(/\/$/, '')}/${geminiModel}:generateContent?key=${apiKey}`
+
+    const body = {
+      contents,
+      generationConfig: {
+        maxOutputTokens: isVision ? 300 : 50,
+        temperature: 0.7
+      }
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    })
+
+    return response
   }
 }

@@ -105,18 +105,25 @@
           </div>
           
           <div class="flex space-x-2">
-            <NuxtLink :to="`/admin/key-pool/${provider.id}`" 
+            <button @click="openTestModal(provider, 'connection')"
+                    class="px-4 py-2 text-blue-600 hover:text-blue-700 rounded-xl border border-blue-200 hover:border-blue-300 transition duration-200 text-sm inline-flex items-center">
+              <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+              </svg>
+              测试
+            </button>
+            <NuxtLink :to="`/admin/key-pool/${provider.id}`"
                     class="px-4 py-2 text-emerald-600 hover:text-emerald-700 rounded-xl border border-emerald-200 hover:border-emerald-300 transition duration-200 text-sm inline-flex items-center">
               <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
               </svg>
               密钥池
             </NuxtLink>
-            <button @click="editProvider(provider)" 
+            <button @click="editProvider(provider)"
                     class="px-4 py-2 text-orange-600 hover:text-orange-700 rounded-xl border border-orange-200 hover:border-orange-300 transition duration-200 text-sm">
               编辑
             </button>
-            <button @click="deleteProvider(provider.id)" 
+            <button @click="deleteProvider(provider.id)"
                     class="px-4 py-2 text-red-600 hover:text-red-700 rounded-xl border border-red-200 hover:border-red-300 transition duration-200 text-sm">
               删除
             </button>
@@ -165,6 +172,83 @@
     @confirm="handleConfirmDialogConfirm"
     @cancel="handleConfirmDialogCancel"
   />
+
+  <!-- 测试模态框 -->
+  <div v-if="showTestModal && testingProvider" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+      <div class="flex justify-between items-center px-6 py-4 border-b">
+        <h3 class="text-xl font-bold text-gray-900">
+          {{ testingType === 'connection' ? '连通性测试' : '图片识别测试' }}
+        </h3>
+        <button @click="closeTestModal" class="text-gray-400 hover:text-gray-600">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="px-6 py-4 space-y-4">
+        <!-- 供应商信息 -->
+        <div class="bg-gray-50 rounded-xl p-3">
+          <p class="text-sm text-gray-600">供应商: <span class="font-medium text-gray-900">{{ testingProvider.name }}</span></p>
+          <p class="text-sm text-gray-600">类型: <span class="font-medium text-gray-900">{{ testingProvider.type }}</span></p>
+        </div>
+
+        <!-- 模型选择 -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">
+            选择测试模型 <span class="text-red-500">*</span>
+          </label>
+          <select v-model="selectedTestModel"
+                  class="block w-full px-3 py-3 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+            <option v-for="model in testingProvider.models" :key="model" :value="model">
+              {{ model }}
+            </option>
+          </select>
+        </div>
+
+        <!-- 测试结果 -->
+        <div v-if="testResult" class="space-y-2">
+          <div :class="testResult.success ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'"
+               class="border rounded-xl p-3">
+            <div class="flex items-center space-x-2">
+              <svg v-if="testResult.success" class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              <svg v-else class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+              <span :class="testResult.success ? 'text-emerald-700' : 'text-red-700'" class="font-medium">
+                {{ testResult.message }}
+              </span>
+            </div>
+            <p class="text-sm text-gray-600 mt-1">
+              耗时: {{ testResult.latency }}ms
+            </p>
+            <p v-if="testingType === 'vision'" class="text-sm mt-1" :class="testResult.visionSupported ? 'text-emerald-600' : 'text-red-600'">
+              图片识别: {{ testResult.visionSupported ? '支持' : '不支持' }}
+            </p>
+            <p v-if="testResult.error" class="text-xs text-gray-500 mt-2 break-all">
+              {{ testResult.error }}
+            </p>
+          </div>
+        </div>
+
+        <!-- 测试按钮 -->
+        <div class="flex space-x-3 pt-2">
+          <button @click="closeTestModal"
+                  class="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition duration-200">
+            关闭
+          </button>
+          <button @click="runTest"
+                  :disabled="testLoading || !selectedTestModel"
+                  class="flex-1 px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:from-orange-600 hover:to-orange-700 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+            {{ testLoading ? '测试中...' : '开始测试' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -182,12 +266,21 @@ const {
   showConfirmDialog,
   confirmDialogConfig,
   confirmLoading,
+  showTestModal,
+  testingProvider,
+  selectedTestModel,
+  testingType,
+  testLoading,
+  testResult,
   editProvider,
   updateProvider,
   cancelEdit,
   deleteProvider,
   toggleProviderExpansion,
   handleConfirmDialogCancel,
-  handleConfirmDialogConfirm
+  handleConfirmDialogConfirm,
+  openTestModal,
+  closeTestModal,
+  runTest
 } = useProviders()
 </script>

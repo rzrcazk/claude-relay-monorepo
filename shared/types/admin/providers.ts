@@ -44,3 +44,27 @@ export interface ProviderConfig {
   transformer: 'claude-to-openai' | 'claude-to-gemini' | 'claude-to-minimax'
   isPreset: boolean  // 是否为预定义供应商
 }
+
+// 模型测试相关类型
+export interface TestConnectionRequest {
+  model: string
+}
+
+export interface TestConnectionResponse {
+  success: boolean
+  latency: number  // 毫秒
+  message: string
+  error?: string
+}
+
+export interface TestVisionRequest {
+  model: string
+}
+
+export interface TestVisionResponse {
+  success: boolean
+  latency: number
+  message: string
+  visionSupported: boolean
+  error?: string
+}

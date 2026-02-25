@@ -7,7 +7,7 @@ import { validator } from 'hono/validator'
 import { HTTPException } from 'hono/http-exception'
 import { ProviderService } from '../../services/admin/index'
 import { createSuccessResponse } from '../../utils/response'
-import { AddProviderRequest, EditProviderRequest } from '../../../../../shared/types/admin/providers'
+import { AddProviderRequest, EditProviderRequest, TestConnectionRequest, TestVisionRequest } from '../../../../../shared/types/admin/providers'
 import type { Bindings } from '../../types/env'
 
 const providerRoutes = new Hono<{ Bindings: Bindings }>()
@@ -87,11 +87,75 @@ providerRoutes.delete('/providers/:id',
   }),
   async (c) => {
     const { id } = c.req.valid('param')
-    
+
     const providerService = new ProviderService(c.env.CLAUDE_RELAY_ADMIN_KV)
     await providerService.deleteProvider(id)
-    
+
     return createSuccessResponse(null, '删除供应商成功')
+  }
+)
+
+// 测试供应商连通性
+providerRoutes.post('/providers/:id/test-connection',
+  validator('param', (value) => {
+    if (!value.id) {
+      throw new HTTPException(400, {
+        message: '缺少供应商 ID'
+      })
+    }
+    return value
+  }),
+  validator('json', (value: any): TestConnectionRequest => {
+    const { model } = value
+
+    if (!model) {
+      throw new HTTPException(400, {
+        message: '缺少模型名称'
+      })
+    }
+
+    return value
+  }),
+  async (c) => {
+    const { id } = c.req.valid('param')
+    const request = c.req.valid('json')
+
+    const providerService = new ProviderService(c.env.CLAUDE_RELAY_ADMIN_KV)
+    const result = await providerService.testConnection(id, request)
+
+    return createSuccessResponse(result, '连通性测试完成')
+  }
+)
+
+// 测试供应商图片识别能力
+providerRoutes.post('/providers/:id/test-vision',
+  validator('param', (value) => {
+    if (!value.id) {
+      throw new HTTPException(400, {
+        message: '缺少供应商 ID'
+      })
+    }
+    return value
+  }),
+  validator('json', (value: any): TestVisionRequest => {
+    const { model } = value
+
+    if (!model) {
+      throw new HTTPException(400, {
+        message: '缺少模型名称'
+      })
+    }
+
+    return value
+  }),
+  async (c) => {
+    const { id } = c.req.valid('param')
+    const request = c.req.valid('json')
+
+    const providerService = new ProviderService(c.env.CLAUDE_RELAY_ADMIN_KV)
+    const result = await providerService.testVision(id, request)
+
+    return createSuccessResponse(result, '图片识别测试完成')
   }
 )
 

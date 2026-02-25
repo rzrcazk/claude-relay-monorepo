@@ -1,5 +1,5 @@
 import { ref, inject } from 'vue'
-import type { ModelProvider, EditProviderRequest } from '../../../shared/types/admin/providers'
+import type { ModelProvider, EditProviderRequest, TestConnectionResponse, TestVisionResponse } from '../../../shared/types/admin/providers'
 import type { KeyPoolStats } from '../../../shared/types/key-pool'
 import { API_ENDPOINTS } from '../../../shared/constants/endpoints'
 import { useKeyPool } from './useKeyPool'
@@ -189,6 +189,80 @@ export const useProviders = () => {
     }
   }
 
+  // 测试功能相关状态
+  const showTestModal = ref(false)
+  const testingProvider = ref<ModelProvider | null>(null)
+  const selectedTestModel = ref('')
+  const testingType = ref<'connection' | 'vision'>('connection')
+  const testLoading = ref(false)
+  const testResult = ref<{
+    success: boolean
+    latency: number
+    message: string
+    visionSupported?: boolean
+    error?: string
+  } | null>(null)
+
+  // 打开测试模态框
+  const openTestModal = (provider: ModelProvider, type: 'connection' | 'vision') => {
+    testingProvider.value = provider
+    testingType.value = type
+    selectedTestModel.value = provider.models[0] || ''
+    testResult.value = null
+    showTestModal.value = true
+  }
+
+  // 关闭测试模态框
+  const closeTestModal = () => {
+    showTestModal.value = false
+    testingProvider.value = null
+    selectedTestModel.value = ''
+    testResult.value = null
+  }
+
+  // 执行测试
+  const runTest = async () => {
+    if (!testingProvider.value || !selectedTestModel.value) return
+
+    testLoading.value = true
+    testResult.value = null
+
+    try {
+      if (testingType.value === 'connection') {
+        // 测试连通性
+        const response = await $fetch<{ success: boolean; data: TestConnectionResponse }>(
+          `${API_ENDPOINTS.ADMIN_PROVIDERS}/${testingProvider.value.id}/test-connection`,
+          {
+            method: 'POST',
+            baseURL: config.public.apiBaseUrl,
+            body: { model: selectedTestModel.value }
+          }
+        )
+        testResult.value = response.data
+      } else {
+        // 测试图片识别
+        const response = await $fetch<{ success: boolean; data: TestVisionResponse }>(
+          `${API_ENDPOINTS.ADMIN_PROVIDERS}/${testingProvider.value.id}/test-vision`,
+          {
+            method: 'POST',
+            baseURL: config.public.apiBaseUrl,
+            body: { model: selectedTestModel.value }
+          }
+        )
+        testResult.value = response.data
+      }
+    } catch (error: any) {
+      testResult.value = {
+        success: false,
+        latency: 0,
+        message: error.data?.message || error.message || '测试请求失败',
+        error: error.data?.message || error.message || 'Unknown error'
+      }
+    } finally {
+      testLoading.value = false
+    }
+  }
+
   // 初始化时加载数据
   loadProviders()
 
@@ -200,12 +274,20 @@ export const useProviders = () => {
     showEditModal,
     editingProvider,
     editLoading,
-    
+
     // 确认对话框状态
     showConfirmDialog,
     confirmDialogConfig,
     confirmLoading,
-    
+
+    // 测试功能状态
+    showTestModal,
+    testingProvider,
+    selectedTestModel,
+    testingType,
+    testLoading,
+    testResult,
+
     // 方法
     loadProviders,
     loadKeyPoolStatuses,
@@ -215,6 +297,9 @@ export const useProviders = () => {
     deleteProvider,
     toggleProviderExpansion,
     handleConfirmDialogCancel,
-    handleConfirmDialogConfirm
+    handleConfirmDialogConfirm,
+    openTestModal,
+    closeTestModal,
+    runTest
   }
 }
