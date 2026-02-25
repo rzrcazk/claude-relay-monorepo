@@ -9,7 +9,12 @@ export class ResponseWrapper {
   /**
    * 包装转换器的输出为 HTTP Response
    */
-  static wrap(result: Message | ReadableStream): Response {
+  static wrap(result: Message | ReadableStream | Response): Response {
+    // 如果已经是 Response，直接返回
+    if (result instanceof Response) {
+      return result
+    }
+
     if (result instanceof ReadableStream) {
       // 流式响应
       return new Response(result, {

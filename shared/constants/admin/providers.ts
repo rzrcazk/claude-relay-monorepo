@@ -27,6 +27,18 @@ export const PROVIDER_CONFIGS = {
     transformer: 'claude-to-gemini' as const,
     isPreset: true
   },
+  // 预定义供应商 - MiniMax
+  minimax: {
+    name: 'MiniMax',
+    description: 'MiniMax M2.5 系列模型，支持 Anthropic 兼容 API',
+    icon: 'from-orange-500 to-red-600',
+    type: 'minimax' as const,
+    endpoint: 'https://api.minimaxi.com/anthropic',
+    models: ['MiniMax-M2.5', 'MiniMax-M2.5-highspeed', 'MiniMax-M2.5-lightning'],
+    helpText: '请前往 https://platform.minimaxi.com/ 注册并获取 API Key',
+    transformer: 'claude-to-minimax' as const,
+    isPreset: true
+  },
   // 自定义 OpenAI 兼容服务
   openai: {
     name: 'OpenAI Compatible',

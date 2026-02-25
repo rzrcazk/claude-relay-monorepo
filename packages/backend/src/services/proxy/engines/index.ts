@@ -6,3 +6,4 @@
 export * from './types'
 export { ClaudeEngine } from './claude-engine'
 export { ProviderEngine } from './provider-engine'
+export { MinimaxEngine } from './minimax-engine'

@@ -172,22 +172,23 @@ export class ClaudeToOpenAITransformer implements Transformer {
         // 检查第三方 API 非标准响应格式
         if (response && typeof response === 'object' &&
             ('status' in response) && ('msg' in response)) {
+          const errorResponse = response as unknown as { status: number; msg: string; body?: unknown }
           console.error('=== 第三方 API 错误响应 ===')
           console.error('🚨 错误响应:', JSON.stringify({
-            status: response.status,
-            message: response.msg,
-            body: response.body,
+            status: errorResponse.status,
+            message: errorResponse.msg,
+            body: errorResponse.body,
             model: model,
             provider: this.baseURL
           }, null, 2))
 
           // 根据常见的错误状态码提供友好错误
-          const status = String(response.status)
-          if (status === '435' || response.msg === 'Model not support') {
+          const status = String(errorResponse.status)
+          if (status === '435' || errorResponse.msg === 'Model not support') {
             throw new Error(`模型 ${model} 不被当前供应商支持。请检查模型名称或更换供应商/模型。 [供应商: ${new URL(this.baseURL).hostname}]`)
           }
 
-          throw new Error(`供应商 API 错误: ${response.msg} (状态码: ${response.status})`)
+          throw new Error(`供应商 API 错误: ${errorResponse.msg} (状态码: ${errorResponse.status})`)
         }
 
         // 如果响应为空或格式不正确，抛出详细错误
