@@ -10,7 +10,7 @@ export const PROVIDER_CONFIGS = {
     icon: 'from-blue-500 to-purple-600',
     type: 'openai' as const,
     endpoint: 'https://api-inference.modelscope.cn/v1/chat/completions',
-    models: ['Qwen/Qwen3-Coder-480B-A35B-Instruct'],
+    models: ['Qwen/Qwen3.5-397B-A17B', 'moonshotai/Kimi-K2.5'],
     helpText: '请前往 https://www.modelscope.cn/ 注册并获取 API Key',
     transformer: 'claude-to-openai' as const,
     isPreset: true
