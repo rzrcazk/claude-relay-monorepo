@@ -17,8 +17,8 @@ export class MinimaxEngine implements Engine {
   }
 
   async processRequest(request: MessageCreateParamsBase): Promise<Response> {
-    // 使用 baseUrl + 后缀构建完整 URL
-    const url = `${this.baseUrl}/v1/text/chatcompletion_v2`
+    // Anthropic 兼容统一使用 /v1/messages
+    const url = `${this.baseUrl}/v1/messages`
     const response = await fetch(url, {
       method: 'POST',
       headers: {

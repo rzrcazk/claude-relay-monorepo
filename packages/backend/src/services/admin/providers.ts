@@ -500,15 +500,9 @@ export class ProviderService {
       max_tokens: isVision ? 300 : 1024
     }
 
-    // 根据 provider.type 自动添加正确的后缀
+    // Anthropic 兼容统一使用 /v1/messages
     const baseUrl = provider.baseUrl.replace(/\/$/, '')
-    // MiniMax 使用不同的 API 路径
-    const isMinimax = baseUrl.includes('minimaxi')
-    const url = provider.type === 'anthropic' && !isMinimax
-      ? `${baseUrl}/v1/messages`
-      : isMinimax
-        ? `${baseUrl}/v1/text/chatcompletion_v2`
-        : `${baseUrl}/v1/messages`
+    const url = `${baseUrl}/v1/messages`
     const response = await fetch(url, {
       method: 'POST',
       headers: {
