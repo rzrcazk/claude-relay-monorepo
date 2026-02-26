@@ -345,13 +345,16 @@ const capabilityTypes: CapabilityType[] = ['thinking', 'web_search', 'vision', '
 // 填充测试提示词到消息框
 const handleFillPrompt = (capability: CapabilityType) => {
   const prompt = CAPABILITY_PROMPTS[capability]
+  console.log('[视觉测试] capability:', capability, 'prompt:', prompt)
   if (prompt.image) {
     // 视觉测试 - 填充图片
+    console.log('[视觉测试] 设置图片, image长度:', prompt.image.length)
     chatImage.value = prompt.image
   } else {
     chatImage.value = null
   }
   chatInput.value = prompt.message
+  console.log('[视觉测试] chatImage.value 设置后:', !!chatImage.value, '长度:', chatImage.value?.length)
 }
 
 // 切换能力标记状态

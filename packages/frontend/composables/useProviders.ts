@@ -251,6 +251,8 @@ export const useProviders = () => {
     const userMessage = chatInput.value.trim()
     const userImage = chatImage.value || undefined
 
+    console.log('[sendChat] chatImage.value:', !!chatImage.value, 'userImage:', !!userImage, '长度:', userImage?.length)
+
     // 添加用户消息
     chatMessages.value.push({
       role: 'user',
@@ -260,6 +262,8 @@ export const useProviders = () => {
 
     const currentInput = userMessage
     const currentImage = userImage
+
+    console.log('[sendChat] 发送请求 - message:', currentInput, 'image:', !!currentImage, '长度:', currentImage?.length)
 
     // 清空输入
     chatInput.value = 'Hi'
