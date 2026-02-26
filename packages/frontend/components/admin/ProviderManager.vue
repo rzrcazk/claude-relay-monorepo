@@ -207,6 +207,20 @@
                 class="block w-full px-3 py-2 border border-gray-200 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
           <option v-for="model in testingProvider.models" :key="model" :value="model">{{ model }}</option>
         </select>
+
+        <!-- 能力标签检测区域 -->
+        <div class="flex flex-wrap gap-2 pt-2">
+          <ModelCapabilityTag
+            v-for="cap in capabilityTypes"
+            :key="cap"
+            :capability="cap"
+            :model="selectedTestModel"
+            :provider-id="testingProvider.id"
+            :supported="getCapabilityResult(testingProvider.id, selectedTestModel, cap)"
+            :loading="detectingCapability === `${testingProvider.id}_${selectedTestModel}_${cap}`"
+            @detect="(capability) => testingProvider && handleDetectCapability(testingProvider, selectedTestModel, capability)"
+          />
+        </div>
       </div>
 
       <!-- 聊天消息区域 -->
@@ -290,6 +304,8 @@
 <script setup lang="ts">
 import { useProviders } from '../../composables/useProviders'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
+import ModelCapabilityTag from './ModelCapabilityTag.vue'
+import type { CapabilityType } from '../../../shared/types/admin/providers'
 
 // 使用 composable 来管理供应商相关逻辑
 const {
@@ -326,6 +342,27 @@ const {
   runTest,
   sendChat,
   handleImageUpload,
-  clearImage
+  clearImage,
+  // 能力检测
+  capabilityResults,
+  detectCapability,
+  getCapabilityResult
 } = useProviders()
+
+// 能力类型列表
+const capabilityTypes: CapabilityType[] = ['thinking', 'web_search', 'vision', 'long_context']
+
+// 能力检测状态
+const detectingCapability = ref<string | null>(null)
+
+// 处理能力检测
+const handleDetectCapability = async (provider: NonNullable<typeof testingProvider.value>, model: string, capability: CapabilityType) => {
+  if (!provider) return
+  detectingCapability.value = `${provider.id}_${model}_${capability}`
+  try {
+    await detectCapability(provider.id, model, capability)
+  } finally {
+    detectingCapability.value = null
+  }
+}
 </script>

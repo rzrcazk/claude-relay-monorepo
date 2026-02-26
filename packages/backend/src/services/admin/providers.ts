@@ -2,7 +2,7 @@
  * 模型供应商管理服务
  */
 
-import { ModelProvider, AddProviderRequest, EditProviderRequest, TestConnectionRequest, TestConnectionResponse, TestVisionRequest, TestVisionResponse, ChatRequest, ChatResponse } from '../../../../../shared/types/admin/providers'
+import { ModelProvider, AddProviderRequest, EditProviderRequest, TestConnectionRequest, TestConnectionResponse, TestVisionRequest, TestVisionResponse, ChatRequest, ChatResponse, DetectCapabilityRequest, DetectCapabilityResponse, CapabilityType } from '../../../../../shared/types/admin/providers'
 import { HTTPException } from 'hono/http-exception'
 import { KeyPoolManager } from '../key-pool'
 import { ProviderRepository, ModelRepository, RouteConfigRepository } from '../../repositories'
@@ -308,6 +308,380 @@ export class ProviderService {
         error: error instanceof Error ? error.message : 'Unknown error'
       }
     }
+  }
+
+  /**
+   * 检测模型能力
+   */
+  async detectCapability(providerId: string, request: DetectCapabilityRequest): Promise<DetectCapabilityResponse> {
+    const provider = await this.providerRepo.getById(providerId)
+    if (!provider) {
+      throw new HTTPException(404, { message: '供应商不存在' })
+    }
+
+    // 获取 Key Pool
+    const pool = await this.keyPoolManager.getOrCreatePool(providerId, provider.type)
+    const keys = await pool.getKeys()
+    const activeKeys = keys.filter(k => k.status === 'active')
+
+    if (activeKeys.length === 0) {
+      return {
+        capability: request.capability,
+        supported: false,
+        latency: 0,
+        message: '没有可用的 API Key',
+        error: 'NO_KEYS'
+      }
+    }
+
+    const apiKey = activeKeys[0]
+    const startTime = Date.now()
+
+    try {
+      switch (request.capability) {
+        case 'vision':
+          return await this.detectVision(provider, apiKey.key, request.model, startTime)
+        case 'thinking':
+          return await this.detectThinking(provider, apiKey.key, request.model, startTime)
+        case 'web_search':
+          return await this.detectWebSearch(provider, apiKey.key, request.model, startTime)
+        case 'long_context':
+          return this.detectLongContext(request.model, startTime)
+        default:
+          return {
+            capability: request.capability,
+            supported: false,
+            latency: Date.now() - startTime,
+            message: `未知能力类型: ${request.capability}`
+          }
+      }
+    } catch (error) {
+      return {
+        capability: request.capability,
+        supported: false,
+        latency: Date.now() - startTime,
+        message: `检测异常: ${error instanceof Error ? error.message : '未知错误'}`,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  /**
+   * 检测视觉能力 - 复用 testVision 逻辑
+   */
+  private async detectVision(provider: ModelProvider, apiKey: string, model: string, startTime: number): Promise<DetectCapabilityResponse> {
+    const testImage = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+
+    const testMessages = [
+      {
+        role: 'user' as const,
+        content: [
+          { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/png' as const, data: testImage } },
+          { type: 'text' as const, text: 'What do you see?' }
+        ]
+      }
+    ]
+
+    let response: Response
+    if (provider.type === 'gemini') {
+      response = await this.callGeminiApi(provider, apiKey, model, testMessages, true)
+    } else if (provider.type === 'anthropic') {
+      response = await this.callAnthropicApi(provider, apiKey, model, testMessages, true)
+    } else {
+      response = await this.callOpenAIApi(provider, apiKey, model, testMessages, true)
+    }
+
+    const latency = Date.now() - startTime
+
+    if (response.ok) {
+      const responseText = await response.text()
+      const supported = responseText.length > 10 && !responseText.toLowerCase().includes('error')
+      return {
+        capability: 'vision',
+        supported,
+        latency,
+        message: supported ? '模型支持视觉理解' : 'API 返回异常响应'
+      }
+    } else {
+      const errorText = await response.text()
+      const supported = false
+      const isModelNotSupport = errorText.toLowerCase().includes('not support') ||
+                                errorText.toLowerCase().includes('vision') ||
+                                errorText.toLowerCase().includes('image')
+      return {
+        capability: 'vision',
+        supported,
+        latency,
+        message: isModelNotSupport ? '模型不支持视觉理解' : `请求失败: ${response.status}`,
+        error: errorText.substring(0, 200)
+      }
+    }
+  }
+
+  /**
+   * 检测思考能力 - 发送带思考提示的请求，检查返回是否有 thinking 块
+   */
+  private async detectThinking(provider: ModelProvider, apiKey: string, model: string, startTime: number): Promise<DetectCapabilityResponse> {
+    const testMessages = [{ role: 'user' as const, content: 'Please think about what is 2+2. Show your thinking process.' }]
+
+    let response: Response
+    if (provider.type === 'gemini') {
+      // Gemini 不支持 thinking 块，直接测试响应
+      response = await this.callGeminiApi(provider, apiKey, model, testMessages, false)
+    } else if (provider.type === 'anthropic') {
+      // Anthropic 兼容 API - 检查是否返回 thinking 块
+      response = await this.callAnthropicApiWithThinking(provider, apiKey, model, testMessages)
+    } else {
+      // OpenAI 兼容 - 部分模型支持 o1 系列
+      response = await this.callOpenAIApi(provider, apiKey, model, testMessages, false)
+    }
+
+    const latency = Date.now() - startTime
+
+    if (response.ok) {
+      const responseText = await response.text()
+      // 检查响应中是否包含 thinking 相关字段
+      const hasThinking = responseText.includes('thinking') ||
+                          responseText.includes('thought') ||
+                          responseText.includes('reasoning')
+      return {
+        capability: 'thinking',
+        supported: hasThinking,
+        latency,
+        message: hasThinking ? '模型支持深度思考' : '模型可能不支持深度思考'
+      }
+    } else {
+      const errorText = await response.text()
+      return {
+        capability: 'thinking',
+        supported: false,
+        latency,
+        message: `请求失败: ${response.status}`,
+        error: errorText.substring(0, 200)
+      }
+    }
+  }
+
+  /**
+   * 检测联网能力 - 发送带工具请求，检查是否能调用搜索
+   */
+  private async detectWebSearch(provider: ModelProvider, apiKey: string, model: string, startTime: number): Promise<DetectCapabilityResponse> {
+    // 发送一个需要联网的请求
+    const testMessages = [{ role: 'user' as const, content: 'Search for the latest news about AI today.' }]
+
+    let response: Response
+    if (provider.type === 'gemini') {
+      // Gemini 使用 tools 字段
+      response = await this.callGeminiApiWithTools(provider, apiKey, model, testMessages)
+    } else if (provider.type === 'anthropic') {
+      // Anthropic 兼容 API
+      response = await this.callAnthropicApi(provider, apiKey, model, testMessages, false)
+    } else {
+      // OpenAI 兼容 - 使用 tools 参数
+      response = await this.callOpenAIApiWithTools(provider, apiKey, model, testMessages)
+    }
+
+    const latency = Date.now() - startTime
+
+    if (response.ok) {
+      const responseText = await response.text()
+      // 检查响应中是否包含工具调用相关字段
+      const hasToolUse = responseText.includes('tool_calls') ||
+                         responseText.includes('function_call') ||
+                         responseText.includes('search_results')
+      return {
+        capability: 'web_search',
+        supported: hasToolUse,
+        latency,
+        message: hasToolUse ? '模型支持联网搜索' : '模型可能不支持联网搜索'
+      }
+    } else {
+      const errorText = await response.text()
+      // 某些不支持工具的模型会返回错误，这也是一种检测方式
+      const isToolNotSupported = errorText.toLowerCase().includes('tool') ||
+                                 errorText.toLowerCase().includes('function')
+      return {
+        capability: 'web_search',
+        supported: false,
+        latency,
+        message: isToolNotSupported ? '模型不支持联网搜索' : `请求失败: ${response.status}`,
+        error: errorText.substring(0, 200)
+      }
+    }
+  }
+
+  /**
+   * 检测长上下文能力 - 目前基于模型名称判断
+   */
+  private detectLongContext(model: string, startTime: number): DetectCapabilityResponse {
+    const latency = Date.now() - startTime
+
+    // 常见长上下文模型名称关键词
+    const longContextKeywords = ['32k', '64k', '128k', '200k', 'long', 'extended', 'context']
+    const isLongContext = longContextKeywords.some(keyword => model.toLowerCase().includes(keyword))
+
+    return {
+      capability: 'long_context',
+      supported: isLongContext,
+      latency,
+      message: isLongContext ? '模型可能支持长上下文' : '模型可能不支持长上下文（基于名称推断）'
+    }
+  }
+
+  /**
+   * 调用 Anthropic API 并启用 thinking（如果支持）
+   */
+  private async callAnthropicApiWithThinking(
+    provider: ModelProvider,
+    apiKey: string,
+    model: string,
+    messages: any[]
+  ): Promise<Response> {
+    const body: any = {
+      model,
+      messages: messages.map(msg => {
+        if (Array.isArray(msg.content)) {
+          return {
+            role: msg.role,
+            content: msg.content.map((c: { type: string; text?: string; source?: any }) => {
+              if (c.type === 'text') {
+                return { type: 'text', text: c.text }
+              } else if (c.type === 'image') {
+                return {
+                  type: 'image',
+                  source: {
+                    type: c.source?.type || 'base64',
+                    media_type: c.source?.media_type || 'image/png',
+                    data: c.source?.data
+                  }
+                }
+              }
+              return c
+            })
+          }
+        }
+        return msg
+      }),
+      max_tokens: 1024,
+      thinking: { type: 'enabled' }  // 启用思考模式
+    }
+
+    const baseUrl = provider.baseUrl.replace(/\/$/, '')
+    const url = `${baseUrl}/v1/messages`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify(body)
+    })
+
+    return response
+  }
+
+  /**
+   * 调用 OpenAI API 并启用 tools
+   */
+  private async callOpenAIApiWithTools(
+    provider: ModelProvider,
+    apiKey: string,
+    model: string,
+    messages: any[]
+  ): Promise<Response> {
+    const body: any = {
+      model,
+      messages,
+      tools: [
+        {
+          type: 'function',
+          function: {
+            name: 'search',
+            description: 'Search for information on the web',
+            parameters: {
+              type: 'object',
+              properties: {
+                query: { type: 'string', description: 'The search query' }
+              },
+              required: ['query']
+            }
+          }
+        }
+      ]
+    }
+
+    const baseUrl = provider.baseUrl.replace(/\/$/, '')
+    const url = `${baseUrl}/v1/chat/completions`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify(body)
+    })
+
+    return response
+  }
+
+  /**
+   * 调用 Gemini API 并启用 tools
+   */
+  private async callGeminiApiWithTools(
+    provider: ModelProvider,
+    apiKey: string,
+    model: string,
+    messages: any[]
+  ): Promise<Response> {
+    const contents: any[] = []
+
+    for (const msg of messages) {
+      if (msg.role === 'user' && typeof msg.content === 'string') {
+        contents.push({
+          role: 'user',
+          parts: [{ text: msg.content }]
+        })
+      }
+    }
+
+    const geminiModel = model.startsWith('gemini-') ? model : `models/${model}`
+    const url = `${provider.baseUrl.replace(/\/$/, '')}/${geminiModel}:generateContent?key=${apiKey}`
+
+    const body = {
+      contents,
+      tools: [
+        {
+          functionDeclarations: [
+            {
+              name: 'search',
+              description: 'Search for information on the web',
+              parameters: {
+                type: 'OBJECT',
+                properties: {
+                  query: { type: 'STRING', description: 'The search query' }
+                },
+                required: ['query']
+              }
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        maxOutputTokens: 50,
+        temperature: 0.7
+      }
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    })
+
+    return response
   }
 
   /**

@@ -7,7 +7,7 @@ import { validator } from 'hono/validator'
 import { HTTPException } from 'hono/http-exception'
 import { ProviderService } from '../../services/admin/index'
 import { createSuccessResponse } from '../../utils/response'
-import { AddProviderRequest, EditProviderRequest, TestConnectionRequest, TestVisionRequest, ChatRequest } from '../../../../../shared/types/admin/providers'
+import { AddProviderRequest, EditProviderRequest, TestConnectionRequest, TestVisionRequest, ChatRequest, DetectCapabilityRequest } from '../../../../../shared/types/admin/providers'
 import type { Bindings } from '../../types/env'
 
 const providerRoutes = new Hono<{ Bindings: Bindings }>()
@@ -156,6 +156,51 @@ providerRoutes.post('/providers/:id/test-vision',
     const result = await providerService.testVision(id, request)
 
     return createSuccessResponse(result, '图片识别测试完成')
+  }
+)
+
+// 检测模型能力
+providerRoutes.post('/providers/:id/detect-capability',
+  validator('param', (value) => {
+    if (!value.id) {
+      throw new HTTPException(400, {
+        message: '缺少供应商 ID'
+      })
+    }
+    return value
+  }),
+  validator('json', (value: any): DetectCapabilityRequest => {
+    const { model, capability } = value
+
+    if (!model) {
+      throw new HTTPException(400, {
+        message: '缺少模型名称'
+      })
+    }
+
+    if (!capability) {
+      throw new HTTPException(400, {
+        message: '缺少能力类型'
+      })
+    }
+
+    const validCapabilities = ['thinking', 'web_search', 'vision', 'long_context']
+    if (!validCapabilities.includes(capability)) {
+      throw new HTTPException(400, {
+        message: `无效的能力类型: ${capability}，可选值: ${validCapabilities.join(', ')}`
+      })
+    }
+
+    return value
+  }),
+  async (c) => {
+    const { id } = c.req.valid('param')
+    const request = c.req.valid('json')
+
+    const providerService = new ProviderService(c.env.CLAUDE_RELAY_ADMIN_KV)
+    const result = await providerService.detectCapability(id, request)
+
+    return createSuccessResponse(result, '能力检测完成')
   }
 )
 

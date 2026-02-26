@@ -69,6 +69,31 @@ export interface TestVisionResponse {
   error?: string
 }
 
+// 能力检测相关类型
+export type CapabilityType = 'thinking' | 'web_search' | 'vision' | 'long_context'
+
+// 能力检测请求
+export interface DetectCapabilityRequest {
+  model: string
+  capability: CapabilityType
+}
+
+// 能力检测响应
+export interface DetectCapabilityResponse {
+  capability: CapabilityType
+  supported: boolean
+  latency: number
+  message: string
+  error?: string
+}
+
+// 能力标签（存储在模型元数据中）
+export interface ModelCapability {
+  capability: CapabilityType
+  supported: boolean | null  // null 表示未检测
+  detectedAt?: string
+}
+
 // 聊天测试请求
 export interface ChatRequest {
   model: string

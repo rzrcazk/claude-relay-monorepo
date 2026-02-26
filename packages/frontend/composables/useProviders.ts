@@ -1,5 +1,5 @@
 import { ref, inject } from 'vue'
-import type { ModelProvider, EditProviderRequest, TestConnectionResponse, TestVisionResponse, ChatResponse } from '../../../shared/types/admin/providers'
+import type { ModelProvider, EditProviderRequest, TestConnectionResponse, TestVisionResponse, ChatResponse, DetectCapabilityResponse, CapabilityType } from '../../../shared/types/admin/providers'
 import type { KeyPoolStats } from '../../../shared/types/key-pool'
 import { API_ENDPOINTS } from '../../../shared/constants/endpoints'
 import { useKeyPool } from './useKeyPool'
@@ -312,6 +312,47 @@ export const useProviders = () => {
     chatImage.value = null
   }
 
+  // 能力检测相关状态
+  const capabilityResults = ref<Map<string, Map<string, boolean>>>(new Map())  // providerId -> model -> capability -> supported
+
+  // 检测模型能力
+  const detectCapability = async (
+    providerId: string,
+    model: string,
+    capability: CapabilityType
+  ): Promise<DetectCapabilityResponse | null> => {
+    try {
+      const response = await $fetch<{ success: boolean; data: DetectCapabilityResponse }>(
+        `${API_ENDPOINTS.ADMIN_PROVIDERS}/${providerId}/detect-capability`,
+        {
+          method: 'POST',
+          baseURL: config.public.apiBaseUrl,
+          body: { model, capability }
+        }
+      )
+
+      // 缓存结果
+      if (!capabilityResults.value.has(providerId)) {
+        capabilityResults.value.set(providerId, new Map())
+      }
+      const providerResults = capabilityResults.value.get(providerId)!
+      providerResults.set(`${model}_${capability}`, response.data.supported)
+
+      return response.data
+    } catch (error: any) {
+      console.error('Failed to detect capability:', error)
+      showNotification(`检测失败: ${error.data?.message || error.message}`, 'error')
+      return null
+    }
+  }
+
+  // 获取缓存的能力检测结果
+  const getCapabilityResult = (providerId: string, model: string, capability: CapabilityType): boolean | null => {
+    const providerResults = capabilityResults.value.get(providerId)
+    if (!providerResults) return null
+    return providerResults.get(`${model}_${capability}`) ?? null
+  }
+
   // 执行测试
   const runTest = async () => {
     if (!testingProvider.value || !selectedTestModel.value) return
@@ -402,6 +443,11 @@ export const useProviders = () => {
     runTest,
     sendChat,
     handleImageUpload,
-    clearImage
+    clearImage,
+
+    // 能力检测
+    capabilityResults,
+    detectCapability,
+    getCapabilityResult
   }
 }
