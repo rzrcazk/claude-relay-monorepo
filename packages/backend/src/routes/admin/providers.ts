@@ -7,7 +7,7 @@ import { validator } from 'hono/validator'
 import { HTTPException } from 'hono/http-exception'
 import { ProviderService } from '../../services/admin/index'
 import { createSuccessResponse } from '../../utils/response'
-import { AddProviderRequest, EditProviderRequest, TestConnectionRequest, TestVisionRequest } from '../../../../../shared/types/admin/providers'
+import { AddProviderRequest, EditProviderRequest, TestConnectionRequest, TestVisionRequest, ChatRequest } from '../../../../../shared/types/admin/providers'
 import type { Bindings } from '../../types/env'
 
 const providerRoutes = new Hono<{ Bindings: Bindings }>()
@@ -156,6 +156,44 @@ providerRoutes.post('/providers/:id/test-vision',
     const result = await providerService.testVision(id, request)
 
     return createSuccessResponse(result, '图片识别测试完成')
+  }
+)
+
+// 聊天测试
+providerRoutes.post('/providers/:id/chat',
+  validator('param', (value) => {
+    if (!value.id) {
+      throw new HTTPException(400, {
+        message: '缺少供应商 ID'
+      })
+    }
+    return value
+  }),
+  validator('json', (value: any): ChatRequest => {
+    const { model, message } = value
+
+    if (!model) {
+      throw new HTTPException(400, {
+        message: '缺少模型名称'
+      })
+    }
+
+    if (!message) {
+      throw new HTTPException(400, {
+        message: '缺少消息内容'
+      })
+    }
+
+    return value
+  }),
+  async (c) => {
+    const { id } = c.req.valid('param')
+    const request = c.req.valid('json')
+
+    const providerService = new ProviderService(c.env.CLAUDE_RELAY_ADMIN_KV)
+    const result = await providerService.chat(id, request)
+
+    return createSuccessResponse(result, '聊天测试完成')
   }
 )
 

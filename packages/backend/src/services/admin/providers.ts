@@ -2,7 +2,7 @@
  * 模型供应商管理服务
  */
 
-import { ModelProvider, AddProviderRequest, EditProviderRequest, TestConnectionRequest, TestConnectionResponse, TestVisionRequest, TestVisionResponse } from '../../../../../shared/types/admin/providers'
+import { ModelProvider, AddProviderRequest, EditProviderRequest, TestConnectionRequest, TestConnectionResponse, TestVisionRequest, TestVisionResponse, ChatRequest, ChatResponse } from '../../../../../shared/types/admin/providers'
 import { HTTPException } from 'hono/http-exception'
 import { KeyPoolManager } from '../key-pool'
 import { ProviderRepository, ModelRepository, RouteConfigRepository } from '../../repositories'
@@ -307,6 +307,120 @@ export class ProviderService {
         visionSupported: false,
         error: error instanceof Error ? error.message : 'Unknown error'
       }
+    }
+  }
+
+  /**
+   * 聊天测试 - 发送自定义消息并获取回复
+   */
+  async chat(providerId: string, request: ChatRequest): Promise<ChatResponse> {
+    const provider = await this.providerRepo.getById(providerId)
+    if (!provider) {
+      throw new HTTPException(404, { message: '供应商不存在' })
+    }
+
+    // 获取 Key Pool
+    const pool = await this.keyPoolManager.getOrCreatePool(providerId, provider.type)
+    const keys = await pool.getKeys()
+    const activeKeys = keys.filter(k => k.status === 'active')
+
+    if (activeKeys.length === 0) {
+      return {
+        success: false,
+        response: '',
+        latency: 0,
+        error: '没有可用的 API Key'
+      }
+    }
+
+    const apiKey = activeKeys[0]
+    const startTime = Date.now()
+
+    try {
+      // 构建消息
+      let testMessages: any[]
+
+      if (request.image) {
+        // 带图片的消息
+        testMessages = [
+          {
+            role: 'user' as const,
+            content: [
+              { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/png' as const, data: request.image } },
+              { type: 'text' as const, text: request.message }
+            ]
+          }
+        ]
+      } else {
+        // 纯文本消息
+        testMessages = [{ role: 'user' as const, content: request.message }]
+      }
+
+      let response: Response
+      const isVision = !!request.image
+
+      if (provider.type === 'gemini') {
+        response = await this.callGeminiApi(provider, apiKey.key, request.model, testMessages, isVision)
+      } else if (provider.type === 'modelscope' || provider.type === 'minimax') {
+        response = await this.callAnthropicApi(provider, apiKey.key, request.model, testMessages, isVision)
+      } else {
+        response = await this.callOpenAIApi(provider, apiKey.key, request.model, testMessages, isVision)
+      }
+
+      const latency = Date.now() - startTime
+
+      if (response.ok) {
+        // 解析响应内容
+        const responseText = await this.parseChatResponse(response, provider.type)
+        return {
+          success: true,
+          response: responseText,
+          latency
+        }
+      } else {
+        const errorText = await response.text()
+        return {
+          success: false,
+          response: '',
+          latency,
+          error: errorText.substring(0, 500)
+        }
+      }
+    } catch (error) {
+      const latency = Date.now() - startTime
+      return {
+        success: false,
+        response: '',
+        latency,
+        error: error instanceof Error ? error.message : '未知错误'
+      }
+    }
+  }
+
+  /**
+   * 解析聊天响应
+   */
+  private async parseChatResponse(response: Response, providerType: string): Promise<string> {
+    const data: any = await response.json()
+
+    if (providerType === 'gemini') {
+      // Gemini 格式
+      if (data.candidates && data.candidates[0]?.content?.parts) {
+        return data.candidates[0].content.parts.map((p: any) => p.text).join('')
+      }
+      return JSON.stringify(data)
+    } else if (providerType === 'modelscope' || providerType === 'minimax') {
+      // Anthropic 兼容格式
+      if (data.content && data.content[0]?.text) {
+        return data.content[0].text
+      }
+      return JSON.stringify(data)
+    } else {
+      // OpenAI 兼容格式
+      if (data.choices && data.choices[0]?.message?.content) {
+        return data.choices[0].message.content
+      }
+      return JSON.stringify(data)
     }
   }
 

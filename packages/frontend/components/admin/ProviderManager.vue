@@ -173,13 +173,12 @@
     @cancel="handleConfirmDialogCancel"
   />
 
-  <!-- 测试模态框 -->
+  <!-- 测试模态框 - 聊天风格 -->
   <div v-if="showTestModal && testingProvider" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg h-[600px] flex flex-col">
+      <!-- 头部 -->
       <div class="flex justify-between items-center px-6 py-4 border-b">
-        <h3 class="text-xl font-bold text-gray-900">
-          {{ testingType === 'connection' ? '连通性测试' : '图片识别测试' }}
-        </h3>
+        <h3 class="text-xl font-bold text-gray-900">聊天测试</h3>
         <button @click="closeTestModal" class="text-gray-400 hover:text-gray-600">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -187,64 +186,101 @@
         </button>
       </div>
 
-      <div class="px-6 py-4 space-y-4">
-        <!-- 供应商信息 -->
-        <div class="bg-gray-50 rounded-xl p-3">
-          <p class="text-sm text-gray-600">供应商: <span class="font-medium text-gray-900">{{ testingProvider.name }}</span></p>
-          <p class="text-sm text-gray-600">类型: <span class="font-medium text-gray-900">{{ testingProvider.type }}</span></p>
+      <!-- Tab 切换 -->
+      <div class="flex border-b">
+        <button
+          @click="chatTab = 'text'"
+          :class="chatTab === 'text' ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+          class="flex-1 py-3 text-center font-medium border-b-2 transition-colors"
+        >纯文本</button>
+        <button
+          @click="chatTab = 'image'"
+          :class="chatTab === 'image' ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+          class="flex-1 py-3 text-center font-medium border-b-2 transition-colors"
+        >带图</button>
+      </div>
+
+      <!-- 供应商信息和模型选择 -->
+      <div class="px-6 py-3 bg-gray-50 border-b space-y-2">
+        <p class="text-sm text-gray-600">供应商: <span class="font-medium text-gray-900">{{ testingProvider.name }}</span></p>
+        <select v-model="selectedTestModel"
+                class="block w-full px-3 py-2 border border-gray-200 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+          <option v-for="model in testingProvider.models" :key="model" :value="model">{{ model }}</option>
+        </select>
+      </div>
+
+      <!-- 聊天消息区域 -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+        <div v-if="chatMessages.length === 0" class="text-center text-gray-400 py-8">
+          <svg class="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+          </svg>
+          <p>发送消息开始测试</p>
         </div>
 
-        <!-- 模型选择 -->
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">
-            选择测试模型 <span class="text-red-500">*</span>
-          </label>
-          <select v-model="selectedTestModel"
-                  class="block w-full px-3 py-3 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent">
-            <option v-for="model in testingProvider.models" :key="model" :value="model">
-              {{ model }}
-            </option>
-          </select>
-        </div>
-
-        <!-- 测试结果 -->
-        <div v-if="testResult" class="space-y-2">
-          <div :class="testResult.success ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'"
-               class="border rounded-xl p-3">
-            <div class="flex items-center space-x-2">
-              <svg v-if="testResult.success" class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-              </svg>
-              <svg v-else class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-              </svg>
-              <span :class="testResult.success ? 'text-emerald-700' : 'text-red-700'" class="font-medium">
-                {{ testResult.message }}
-              </span>
+        <div v-for="(msg, idx) in chatMessages" :key="idx" class="space-y-1">
+          <!-- 用户消息 -->
+          <div v-if="msg.role === 'user'" class="flex justify-end">
+            <div class="bg-orange-500 text-white rounded-2xl rounded-br-md px-4 py-2 max-w-[80%]">
+              <p class="text-sm">{{ msg.content }}</p>
+              <img v-if="msg.image" :src="'data:image/png;base64,' + msg.image" class="mt-2 rounded-lg max-h-32" />
             </div>
-            <p class="text-sm text-gray-600 mt-1">
-              耗时: {{ testResult.latency }}ms
-            </p>
-            <p v-if="testingType === 'vision'" class="text-sm mt-1" :class="testResult.visionSupported ? 'text-emerald-600' : 'text-red-600'">
-              图片识别: {{ testResult.visionSupported ? '支持' : '不支持' }}
-            </p>
-            <p v-if="testResult.error" class="text-xs text-gray-500 mt-2 break-all">
-              {{ testResult.error }}
-            </p>
+          </div>
+          <!-- AI 消息 -->
+          <div v-else class="flex justify-start">
+            <div class="bg-white border border-gray-200 rounded-2xl rounded-bl-md px-4 py-2 max-w-[80%] shadow-sm">
+              <p class="text-sm text-gray-800 whitespace-pre-wrap">{{ msg.content }}</p>
+              <p v-if="msg.latency" class="text-xs text-gray-400 mt-1">{{ msg.latency }}ms</p>
+            </div>
           </div>
         </div>
 
-        <!-- 测试按钮 -->
-        <div class="flex space-x-3 pt-2">
-          <button @click="closeTestModal"
-                  class="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition duration-200">
-            关闭
-          </button>
-          <button @click="runTest"
-                  :disabled="testLoading || !selectedTestModel"
-                  class="flex-1 px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:from-orange-600 hover:to-orange-700 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
-            {{ testLoading ? '测试中...' : '开始测试' }}
-          </button>
+        <!-- 加载中 -->
+        <div v-if="chatLoading" class="flex justify-start">
+          <div class="bg-white border border-gray-200 rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
+            <div class="flex space-x-1">
+              <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
+              <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+              <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 输入区域 -->
+      <div class="p-4 border-t bg-white rounded-b-2xl space-y-3">
+        <!-- 图片上传预览 -->
+        <div v-if="chatTab === 'image'" class="relative inline-block">
+          <div v-if="chatImage" class="flex items-center space-x-2 bg-gray-100 rounded-lg p-2">
+            <img :src="'data:image/png;base64,' + chatImage" class="h-16 w-16 object-cover rounded" />
+            <button @click="clearImage" class="text-gray-500 hover:text-red-500 p-1">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+          <label v-else class="flex items-center justify-center w-16 h-16 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition-colors">
+            <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+            </svg>
+            <input type="file" accept="image/*" class="hidden" @change="(e) => { const file = (e.target as HTMLInputElement).files?.[0]; file && handleImageUpload(file) }" />
+          </label>
+        </div>
+
+        <!-- 文本输入 -->
+        <div class="flex space-x-2">
+          <input
+            v-model="chatInput"
+            @keyup.enter="sendChat"
+            type="text"
+            :placeholder="chatTab === 'image' ? '描述这张图片...' : '输入消息...'"
+            class="flex-1 px-4 py-2 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+          />
+          <button
+            @click="sendChat"
+            :disabled="chatLoading || !chatInput.trim() || (chatTab === 'image' && !chatImage)"
+            class="px-6 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:from-orange-600 hover:to-orange-700 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >发送</button>
         </div>
       </div>
     </div>
@@ -272,6 +308,12 @@ const {
   testingType,
   testLoading,
   testResult,
+  // 聊天测试
+  chatTab,
+  chatInput,
+  chatImage,
+  chatLoading,
+  chatMessages,
   editProvider,
   updateProvider,
   cancelEdit,
@@ -281,6 +323,9 @@ const {
   handleConfirmDialogConfirm,
   openTestModal,
   closeTestModal,
-  runTest
+  runTest,
+  sendChat,
+  handleImageUpload,
+  clearImage
 } = useProviders()
 </script>

@@ -68,3 +68,18 @@ export interface TestVisionResponse {
   visionSupported: boolean
   error?: string
 }
+
+// 聊天测试请求
+export interface ChatRequest {
+  model: string
+  message: string
+  image?: string  // base64 编码的图片
+}
+
+// 聊天测试响应
+export interface ChatResponse {
+  success: boolean
+  response: string  // AI 的实际回复
+  latency: number
+  error?: string
+}

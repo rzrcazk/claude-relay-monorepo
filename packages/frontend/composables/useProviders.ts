@@ -1,5 +1,5 @@
 import { ref, inject } from 'vue'
-import type { ModelProvider, EditProviderRequest, TestConnectionResponse, TestVisionResponse } from '../../../shared/types/admin/providers'
+import type { ModelProvider, EditProviderRequest, TestConnectionResponse, TestVisionResponse, ChatResponse } from '../../../shared/types/admin/providers'
 import type { KeyPoolStats } from '../../../shared/types/key-pool'
 import { API_ENDPOINTS } from '../../../shared/constants/endpoints'
 import { useKeyPool } from './useKeyPool'
@@ -203,12 +203,29 @@ export const useProviders = () => {
     error?: string
   } | null>(null)
 
+  // 聊天测试相关状态
+  const chatTab = ref<'text' | 'image'>('text')
+  const chatInput = ref('Hi')
+  const chatImage = ref<string | null>(null)
+  const chatLoading = ref(false)
+  const chatMessages = ref<Array<{
+    role: 'user' | 'assistant'
+    content: string
+    image?: string
+    latency?: number
+  }>>([])
+
   // 打开测试模态框
   const openTestModal = (provider: ModelProvider, type: 'connection' | 'vision') => {
     testingProvider.value = provider
     testingType.value = type
     selectedTestModel.value = provider.models[0] || ''
     testResult.value = null
+    // 重置聊天状态
+    chatTab.value = 'text'
+    chatInput.value = 'Hi'
+    chatImage.value = null
+    chatMessages.value = []
     showTestModal.value = true
   }
 
@@ -218,6 +235,81 @@ export const useProviders = () => {
     testingProvider.value = null
     selectedTestModel.value = ''
     testResult.value = null
+    // 重置聊天状态
+    chatMessages.value = []
+    chatImage.value = null
+  }
+
+  // 发送聊天消息
+  const sendChat = async () => {
+    if (!testingProvider.value || !selectedTestModel.value || !chatInput.value.trim()) return
+    if (chatTab.value === 'image' && !chatImage.value) return
+
+    chatLoading.value = true
+
+    const userMessage = chatInput.value.trim()
+    const userImage = chatImage.value || undefined
+
+    // 添加用户消息
+    chatMessages.value.push({
+      role: 'user',
+      content: userMessage,
+      image: userImage
+    })
+
+    const currentInput = userMessage
+    const currentImage = userImage
+
+    // 清空输入
+    chatInput.value = 'Hi'
+    chatImage.value = null
+
+    try {
+      const response = await $fetch<{ success: boolean; data: ChatResponse }>(
+        `${API_ENDPOINTS.ADMIN_PROVIDERS}/${testingProvider.value.id}/chat`,
+        {
+          method: 'POST',
+          baseURL: config.public.apiBaseUrl,
+          body: {
+            model: selectedTestModel.value,
+            message: currentInput,
+            image: currentImage
+          }
+        }
+      )
+
+      // 添加 AI 回复
+      chatMessages.value.push({
+        role: 'assistant',
+        content: response.data.response || response.data.error || '无响应',
+        latency: response.data.latency
+      })
+    } catch (error: any) {
+      chatMessages.value.push({
+        role: 'assistant',
+        content: `错误: ${error.data?.message || error.message || '请求失败'}`,
+        latency: 0
+      })
+    } finally {
+      chatLoading.value = false
+    }
+  }
+
+  // 处理图片上传
+  const handleImageUpload = (file: File) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const result = e.target?.result as string
+      // 提取 base64 数据（去掉 data:image/xxx;base64, 前缀）
+      const base64 = result.split(',')[1]
+      chatImage.value = base64
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // 清除图片
+  const clearImage = () => {
+    chatImage.value = null
   }
 
   // 执行测试
@@ -288,6 +380,13 @@ export const useProviders = () => {
     testLoading,
     testResult,
 
+    // 聊天测试状态
+    chatTab,
+    chatInput,
+    chatImage,
+    chatLoading,
+    chatMessages,
+
     // 方法
     loadProviders,
     loadKeyPoolStatuses,
@@ -300,6 +399,9 @@ export const useProviders = () => {
     handleConfirmDialogConfirm,
     openTestModal,
     closeTestModal,
-    runTest
+    runTest,
+    sendChat,
+    handleImageUpload,
+    clearImage
   }
 }
