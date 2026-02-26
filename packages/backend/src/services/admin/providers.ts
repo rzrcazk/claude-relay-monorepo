@@ -325,7 +325,12 @@ export class ProviderService {
       body.max_tokens = 300
     }
 
-    const response = await fetch(`${provider.endpoint}/chat/completions`, {
+    // 清理 endpoint，去掉末尾的 /chat/completions 或 /v1
+    const cleanEndpoint = provider.endpoint
+      .replace(/\/chat\/completions\/?$/, '')
+      .replace(/\/v1\/?$/, '')
+
+    const response = await fetch(`${cleanEndpoint}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
