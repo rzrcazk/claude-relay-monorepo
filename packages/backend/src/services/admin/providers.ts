@@ -311,6 +311,130 @@ export class ProviderService {
   }
 
   /**
+   * AI 判断能力 prompt
+   */
+  private readonly CAPABILITY_JUDGE_PROMPTS = {
+    vision: `You are an AI assistant that determines whether another AI model can see and understand images.
+Analyze the following response from an AI model that was shown an image.
+Determine if the model successfully saw and understood the image.
+
+Respond with ONLY one of these formats:
+- "YES: <brief reason>" if the model showed it can see images
+- "NO: <brief reason>" if the model indicated it cannot see images or the response suggests vision failure
+
+AI Response:
+{response}`,
+
+    thinking: `You are an AI assistant that determines whether another AI model uses deep thinking/reasoning.
+Analyze the following response from an AI model.
+Determine if the model showed a deep thinking or reasoning process.
+
+Respond with ONLY one of these formats:
+- "YES: <brief reason>" if the model showed thinking/reasoning
+- "NO: <brief reason>" if the model did not show thinking/reasoning
+
+AI Response:
+{response}`,
+
+    web_search: `You are an AI assistant that determines whether another AI model can access the internet or use search tools.
+Analyze the following response from an AI model that was asked to search for information.
+Determine if the model showed ability to access the internet or use search tools.
+
+Respond with ONLY one of these formats:
+- "YES: <brief reason>" if the model showed internet/search capability
+- "NO: <brief reason>" if the model did not show internet/search capability
+
+AI Response:
+{response}`
+  }
+
+  /**
+   * 用 AI 判断返回内容
+   */
+  private async judgeWithAI(
+    provider: ModelProvider,
+    apiKey: string,
+    model: string,
+    capability: 'vision' | 'thinking' | 'web_search',
+    originalResponse: string
+  ): Promise<{ supported: boolean; reason: string }> {
+    const prompt = this.CAPABILITY_JUDGE_PROMPTS[capability]
+      .replace('{response}', originalResponse)
+
+    const testMessages = [{ role: 'user' as const, content: prompt }]
+
+    let response: Response
+    try {
+      if (provider.type === 'gemini') {
+        // Gemini
+        const contents = [{ role: 'user', parts: [{ text: prompt }] }]
+        const geminiModel = model.startsWith('gemini-') ? model : `models/${model}`
+        const url = `${provider.baseUrl.replace(/\/$/, '')}/${geminiModel}:generateContent?key=${apiKey}`
+
+        response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 100, temperature: 0.1 } })
+        })
+      } else if (provider.type === 'anthropic') {
+        // Anthropic 兼容
+        response = await fetch(`${provider.baseUrl.replace(/\/$/, '')}/v1/messages`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model,
+            messages: testMessages,
+            max_tokens: 100
+          })
+        })
+      } else {
+        // OpenAI 兼容
+        response = await fetch(`${provider.baseUrl.replace(/\/$/, '')}/v1/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model,
+            messages: testMessages,
+            max_tokens: 100
+          })
+        })
+      }
+
+      if (!response.ok) {
+        return { supported: false, reason: 'Judge API failed' }
+      }
+
+      let judgeText = ''
+      if (provider.type === 'gemini') {
+        const data = await response.json() as any
+        judgeText = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      } else if (provider.type === 'anthropic') {
+        const data = await response.json() as any
+        judgeText = data.content?.[0]?.text || ''
+      } else {
+        const data = await response.json() as any
+        judgeText = data.choices?.[0]?.message?.content || ''
+      }
+
+      // 解析判断结果
+      const upperText = judgeText.toUpperCase()
+      const isSupported = upperText.startsWith('YES')
+      const reason = judgeText.replace(/^(YES|NO):\s*/i, '').trim() || judgeText.substring(0, 100)
+
+      return { supported: isSupported, reason }
+    } catch (error) {
+      return { supported: false, reason: `Judge error: ${error instanceof Error ? error.message : 'unknown'}` }
+    }
+  }
+
+  /**
    * 检测模型能力
    */
   async detectCapability(providerId: string, request: DetectCapabilityRequest): Promise<DetectCapabilityResponse> {
@@ -367,30 +491,9 @@ export class ProviderService {
   }
 
   /**
-   * 检测视觉能力
-   * - MiniMax: 基于模型名称判断（M2.5 不支持视觉）
-   * - Anthropic 兼容（除 MiniMax）: 检查 HTTP 状态码和响应内容
-   * - OpenAI 兼容: 检查响应内容是否有效
-   * - Gemini: 基于模型名称判断
+   * 检测视觉能力 - 用 AI 判断返回结果
    */
   private async detectVision(provider: ModelProvider, apiKey: string, model: string, startTime: number): Promise<DetectCapabilityResponse> {
-    const latency = Date.now() - startTime
-    const modelLower = model.toLowerCase()
-    const baseUrlLower = provider.baseUrl.toLowerCase()
-
-    // MiniMax 特殊处理 - 基于模型名称判断
-    if (baseUrlLower.includes('minimax')) {
-      // MiniMax 只有特定模型支持视觉
-      const visionModels = ['vision', 'vl', 'visual']
-      const isVisionModel = visionModels.some(v => modelLower.includes(v))
-      return {
-        capability: 'vision',
-        supported: isVisionModel,
-        latency,
-        message: isVisionModel ? 'MiniMax 视觉模型' : 'MiniMax M2.5 不支持视觉'
-      }
-    }
-
     const testImage = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 
     const testMessages = [
@@ -398,193 +501,228 @@ export class ProviderService {
         role: 'user' as const,
         content: [
           { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/png' as const, data: testImage } },
-          { type: 'text' as const, text: 'What do you see?' }
+          { type: 'text' as const, text: '这张图片里有什么？请描述你看到的内容。' }
         ]
       }
     ]
 
     let response: Response
-    if (provider.type === 'gemini') {
-      // Gemini - 基于模型名称判断
-      const visionModels = ['gemini-pro-vision', 'gemini-1.5-pro', 'gemini-1.5-flash', 'vision']
-      const isVisionModel = visionModels.some(v => modelLower.includes(v))
+    try {
+      if (provider.type === 'gemini') {
+        const contents = [
+          {
+            role: 'user',
+            parts: [
+              { text: '这张图片里有什么？请描述你看到的内容。' },
+              { inlineData: { mimeType: 'image/png', data: testImage } }
+            ]
+          }
+        ]
+        const geminiModel = model.startsWith('gemini-') ? model : `models/${model}`
+        const url = `${provider.baseUrl.replace(/\/$/, '')}/${geminiModel}:generateContent?key=${apiKey}`
+
+        response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 300 } })
+        })
+      } else if (provider.type === 'anthropic') {
+        response = await this.callAnthropicApi(provider, apiKey, model, testMessages, true)
+      } else {
+        response = await this.callOpenAIApi(provider, apiKey, model, testMessages, true)
+      }
+
+      const latency = Date.now() - startTime
+
+      if (!response.ok) {
+        return {
+          capability: 'vision',
+          supported: false,
+          latency,
+          message: `请求失败: ${response.status}`
+        }
+      }
+
+      // 提取返回的文本内容
+      let originalResponse = ''
+      if (provider.type === 'gemini') {
+        const data = await response.json() as any
+        originalResponse = data.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('\n') || ''
+      } else if (provider.type === 'anthropic') {
+        const data = await response.json() as any
+        originalResponse = data.content?.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('\n') || ''
+      } else {
+        const data = await response.json() as any
+        originalResponse = data.choices?.[0]?.message?.content || ''
+      }
+
+      // 用 AI 判断返回内容
+      const { supported, reason } = await this.judgeWithAI(provider, apiKey, model, 'vision', originalResponse)
+
       return {
         capability: 'vision',
-        supported: isVisionModel,
+        supported,
         latency,
-        message: isVisionModel ? 'Gemini 视觉模型' : 'Gemini 非视觉模型'
+        message: supported ? `支持视觉: ${reason}` : `不支持视觉: ${reason}`
       }
-    } else if (provider.type === 'anthropic') {
-      // Anthropic 兼容 - 检查响应状态
-      response = await this.callAnthropicApi(provider, apiKey, model, testMessages, true)
-      const latency = Date.now() - startTime
-
-      if (response.ok) {
-        // 解析响应，检查是否包含有效内容
-        const responseText = await response.text()
-        const data = JSON.parse(responseText) as any
-        // Anthropic 兼容: 检查 content 数组中是否有有效的 text 内容
-        const textContent = data.content && Array.isArray(data.content) &&
-          data.content.find((c: any) => c.type === 'text' && c.text)
-        const text = textContent?.text || ''
-
-        // 检查文本内容是否包含"无法看图"等错误提示
-        const cannotSeeImages = /don't have the ability to see|cannot see|can't see|unable to see|do not have the ability|no vision|no visual/i.test(text)
-
-        const hasValidContent = text.length > 0 && !cannotSeeImages
-        return {
-          capability: 'vision',
-          supported: hasValidContent,
-          latency,
-          message: hasValidContent ? '模型支持视觉理解' : (cannotSeeImages ? '模型回复无法识别图片' : 'API 返回无效响应')
-        }
-      } else {
-        const errorText = await response.text()
-        // 不支持 vision 的典型错误
-        const isNotSupported = errorText.toLowerCase().includes('unsupported') ||
-                              errorText.toLowerCase().includes('not support') ||
-                              errorText.toLowerCase().includes('vision') ||
-                              errorText.toLowerCase().includes('image') ||
-                              errorText.toLowerCase().includes('400')
-        return {
-          capability: 'vision',
-          supported: false,
-          latency,
-          message: isNotSupported ? '模型不支持视觉理解' : `请求失败: ${response.status}`,
-          error: errorText.substring(0, 200)
-        }
-      }
-    } else {
-      // OpenAI 兼容
-      response = await this.callOpenAIApi(provider, apiKey, model, testMessages, true)
-      const latency = Date.now() - startTime
-
-      if (response.ok) {
-        const data = await response.json() as any
-        // OpenAI: 检查是否有有效的 message.content
-        const content = data.choices?.[0]?.message?.content || ''
-
-        // 检查文本内容是否包含"无法看图"等错误提示
-        const cannotSeeImages = /don't have the ability to see|cannot see|can't see|unable to see|do not have the ability|no vision|no visual/i.test(content)
-
-        const hasValidContent = content.length > 0 && !cannotSeeImages
-        return {
-          capability: 'vision',
-          supported: hasValidContent,
-          latency,
-          message: hasValidContent ? '模型支持视觉理解' : (cannotSeeImages ? '模型回复无法识别图片' : 'API 返回无效响应')
-        }
-      } else {
-        const errorText = await response.text()
-        const isNotSupported = errorText.toLowerCase().includes('unsupported') ||
-                              errorText.toLowerCase().includes('not support') ||
-                              errorText.toLowerCase().includes('vision') ||
-                              errorText.toLowerCase().includes('image')
-        return {
-          capability: 'vision',
-          supported: false,
-          latency,
-          message: isNotSupported ? '模型不支持视觉理解' : `请求失败: ${response.status}`,
-          error: errorText.substring(0, 200)
-        }
+    } catch (error) {
+      return {
+        capability: 'vision',
+        supported: false,
+        latency: Date.now() - startTime,
+        message: `检测异常: ${error instanceof Error ? error.message : '未知错误'}`
       }
     }
   }
 
   /**
-   * 检测思考能力
-   * - Anthropic 兼容: 检查是否返回 thinking 块
-   * - OpenAI 兼容: 检查模型名称是否包含 o1/o3/o4
-   * - Gemini: 不支持
+   * 检测思考能力 - 用 AI 判断返回结果
    */
   private async detectThinking(provider: ModelProvider, apiKey: string, model: string, startTime: number): Promise<DetectCapabilityResponse> {
-    const latency = Date.now() - startTime
+    const testMessages = [
+      { role: 'user' as const, content: '请详细思考并回答：为什么天空是蓝色的？请展示你的思考过程。' }
+    ]
 
-    if (provider.type === 'gemini') {
-      // Gemini 不支持 thinking 块
+    let response: Response
+    try {
+      if (provider.type === 'gemini') {
+        // Gemini 不支持 thinking，直接发普通请求
+        const contents = [{ role: 'user', parts: [{ text: '请详细思考并回答：为什么天空是蓝色的？请展示你的思考过程。' }] }]
+        const geminiModel = model.startsWith('gemini-') ? model : `models/${model}`
+        const url = `${provider.baseUrl.replace(/\/$/, '')}/${geminiModel}:generateContent?key=${apiKey}`
+
+        response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 500 } })
+        })
+      } else if (provider.type === 'anthropic') {
+        // Anthropic 兼容 - 带 thinking 提示
+        response = await this.callAnthropicApiWithThinking(provider, apiKey, model, testMessages)
+      } else {
+        // OpenAI 兼容
+        response = await this.callOpenAIApi(provider, apiKey, model, testMessages, false)
+      }
+
+      const latency = Date.now() - startTime
+
+      if (!response.ok) {
+        return {
+          capability: 'thinking',
+          supported: false,
+          latency,
+          message: `请求失败: ${response.status}`
+        }
+      }
+
+      // 提取返回内容
+      let originalResponse = ''
+      if (provider.type === 'gemini') {
+        const data = await response.json() as any
+        originalResponse = data.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('\n') || ''
+      } else if (provider.type === 'anthropic') {
+        const data = await response.json() as any
+        originalResponse = data.content?.map((c: any) => {
+          if (c.type === 'thinking') return `[thinking]: ${c.thinking}`
+          if (c.type === 'text') return c.text
+          return ''
+        }).join('\n') || ''
+      } else {
+        const data = await response.json() as any
+        originalResponse = data.choices?.[0]?.message?.content || ''
+      }
+
+      // 用 AI 判断
+      const { supported, reason } = await this.judgeWithAI(provider, apiKey, model, 'thinking', originalResponse)
+
+      return {
+        capability: 'thinking',
+        supported,
+        latency,
+        message: supported ? `支持思考: ${reason}` : `不支持思考: ${reason}`
+      }
+    } catch (error) {
       return {
         capability: 'thinking',
         supported: false,
-        latency,
-        message: 'Gemini 不支持深度思考'
-      }
-    } else if (provider.type === 'anthropic') {
-      // Anthropic 兼容 - 发送请求并检查是否返回 thinking 块
-      const testMessages = [{ role: 'user' as const, content: 'Please think about what is 2+2.' }]
-      const response = await this.callAnthropicApiWithThinking(provider, apiKey, model, testMessages)
-
-      if (response.ok) {
-        const data = JSON.parse(await response.text()) as any
-        // 检查是否有 thinking 块
-        const hasThinkingBlock = data.content && Array.isArray(data.content) &&
-          data.content.some((c: any) => c.type === 'thinking')
-        return {
-          capability: 'thinking',
-          supported: hasThinkingBlock,
-          latency,
-          message: hasThinkingBlock ? '模型支持深度思考' : '模型不支持深度思考'
-        }
-      } else {
-        const errorText = await response.text()
-        return {
-          capability: 'thinking',
-          supported: false,
-          latency,
-          message: '模型不支持深度思考',
-          error: errorText.substring(0, 200)
-        }
-      }
-    } else {
-      // OpenAI 兼容 - 基于模型名称判断（o1/o3/o4 系列）
-      const o1Models = ['o1', 'o3', 'o4', 'o1-mini', 'o1-preview', 'o3-mini', 'o4-mini']
-      const isThinkingModel = o1Models.some(m => model.toLowerCase().includes(m))
-      return {
-        capability: 'thinking',
-        supported: isThinkingModel,
-        latency,
-        message: isThinkingModel ? 'OpenAI o 系列模型' : '非 o 系列模型'
+        latency: Date.now() - startTime,
+        message: `检测异常: ${error instanceof Error ? error.message : '未知错误'}`
       }
     }
   }
 
   /**
-   * 检测联网搜索能力 - 基于模型名称和供应商类型判断
+   * 检测联网搜索能力 - 用 AI 判断返回结果
    * 实际工具调用需要特定配置，这里通过模型名称特征判断
    */
   private async detectWebSearch(provider: ModelProvider, apiKey: string, model: string, startTime: number): Promise<DetectCapabilityResponse> {
-    const latency = Date.now() - startTime
-    const modelLower = model.toLowerCase()
+    const testMessages = [
+      { role: 'user' as const, content: '搜索一下今天北京天气怎么样？' }
+    ]
 
-    // 基于模型名称特征判断
-    // Claude Sonnet 4: 支持 Computer Use（可替代联网）
-    // o1/o3/o4: 不支持工具调用
-    // Gemini: 大部分支持工具
-    if (provider.type === 'anthropic') {
-      // Anthropic 兼容
-      const supportsTools = modelLower.includes('sonnet') || modelLower.includes('opus')
-      return {
-        capability: 'web_search',
-        supported: supportsTools,
-        latency,
-        message: supportsTools ? 'Claude Sonnet/Opus 支持工具调用' : '当前模型可能不支持工具调用'
+    let response: Response
+    try {
+      if (provider.type === 'gemini') {
+        const contents = [{ role: 'user', parts: [{ text: '搜索一下今天北京天气怎么样？' }] }]
+        const geminiModel = model.startsWith('gemini-') ? model : `models/${model}`
+        const url = `${provider.baseUrl.replace(/\/$/, '')}/${geminiModel}:generateContent?key=${apiKey}`
+
+        response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 300 } })
+        })
+      } else if (provider.type === 'anthropic') {
+        response = await this.callAnthropicApi(provider, apiKey, model, testMessages, false)
+      } else {
+        // OpenAI 兼容
+        response = await this.callOpenAIApiWithTools(provider, apiKey, model, testMessages)
       }
-    } else if (provider.type === 'gemini') {
-      // Gemini - 大部分支持工具
-      const supportsTools = !modelLower.includes('flash') || modelLower.includes('1.5')
-      return {
-        capability: 'web_search',
-        supported: supportsTools,
-        latency,
-        message: supportsTools ? 'Gemini 支持工具调用' : '部分 Gemini 模型可能不支持'
+
+      const latency = Date.now() - startTime
+
+      if (!response.ok) {
+        return {
+          capability: 'web_search',
+          supported: false,
+          latency,
+          message: `请求失败: ${response.status}`
+        }
       }
-    } else {
-      // OpenAI 兼容 - o1/o3/o4 不支持工具，GPT-4 支持
-      const noTools = modelLower.includes('o1') || modelLower.includes('o3') || modelLower.includes('o4')
+
+      // 提取返回内容
+      let originalResponse = ''
+      if (provider.type === 'gemini') {
+        const data = await response.json() as any
+        originalResponse = data.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('\n') || ''
+      } else if (provider.type === 'anthropic') {
+        const data = await response.json() as any
+        originalResponse = data.content?.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('\n') || ''
+      } else {
+        const data = await response.json() as any
+        // 检查是否有工具调用
+        if (data.choices?.[0]?.message?.tool_calls) {
+          originalResponse = `Tool calls: ${JSON.stringify(data.choices[0].message.tool_calls)}`
+        } else {
+          originalResponse = data.choices?.[0]?.message?.content || ''
+        }
+      }
+
+      // 用 AI 判断
+      const { supported, reason } = await this.judgeWithAI(provider, apiKey, model, 'web_search', originalResponse)
+
       return {
         capability: 'web_search',
-        supported: !noTools,
+        supported,
         latency,
-        message: noTools ? 'o 系列模型不支持工具调用' : 'GPT 系列支持工具调用'
+        message: supported ? `支持联网: ${reason}` : `不支持联网: ${reason}`
+      }
+    } catch (error) {
+      return {
+        capability: 'web_search',
+        supported: false,
+        latency: Date.now() - startTime,
+        message: `检测异常: ${error instanceof Error ? error.message : '未知错误'}`
       }
     }
   }
