@@ -325,12 +325,9 @@ export class ProviderService {
       body.max_tokens = 300
     }
 
-    // 清理 endpoint，去掉末尾的 /chat/completions 或 /v1
-    const cleanEndpoint = provider.endpoint
-      .replace(/\/chat\/completions\/?$/, '')
-      .replace(/\/v1\/?$/, '')
-
-    const response = await fetch(`${cleanEndpoint}/chat/completions`, {
+    // 直接使用用户配置的 endpoint，不再追加路径
+    // 用户应该配置完整的 API 路径，如 https://api.openai.com/v1/chat/completions
+    const response = await fetch(provider.endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
