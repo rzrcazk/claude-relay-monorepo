@@ -368,11 +368,29 @@ export class ProviderService {
 
   /**
    * 检测视觉能力
-   * - Anthropic 兼容: 检查 HTTP 状态码和错误信息
+   * - MiniMax: 基于模型名称判断（M2.5 不支持视觉）
+   * - Anthropic 兼容（除 MiniMax）: 检查 HTTP 状态码和响应内容
    * - OpenAI 兼容: 检查响应内容是否有效
    * - Gemini: 基于模型名称判断
    */
   private async detectVision(provider: ModelProvider, apiKey: string, model: string, startTime: number): Promise<DetectCapabilityResponse> {
+    const latency = Date.now() - startTime
+    const modelLower = model.toLowerCase()
+    const baseUrlLower = provider.baseUrl.toLowerCase()
+
+    // MiniMax 特殊处理 - 基于模型名称判断
+    if (baseUrlLower.includes('minimax')) {
+      // MiniMax 只有特定模型支持视觉
+      const visionModels = ['vision', 'vl', 'visual']
+      const isVisionModel = visionModels.some(v => modelLower.includes(v))
+      return {
+        capability: 'vision',
+        supported: isVisionModel,
+        latency,
+        message: isVisionModel ? 'MiniMax 视觉模型' : 'MiniMax M2.5 不支持视觉'
+      }
+    }
+
     const testImage = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 
     const testMessages = [
@@ -388,9 +406,8 @@ export class ProviderService {
     let response: Response
     if (provider.type === 'gemini') {
       // Gemini - 基于模型名称判断
-      const latency = Date.now() - startTime
       const visionModels = ['gemini-pro-vision', 'gemini-1.5-pro', 'gemini-1.5-flash', 'vision']
-      const isVisionModel = visionModels.some(v => model.toLowerCase().includes(v))
+      const isVisionModel = visionModels.some(v => modelLower.includes(v))
       return {
         capability: 'vision',
         supported: isVisionModel,
