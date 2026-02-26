@@ -424,13 +424,19 @@ export class ProviderService {
         const responseText = await response.text()
         const data = JSON.parse(responseText) as any
         // Anthropic 兼容: 检查 content 数组中是否有有效的 text 内容
-        const hasValidContent = data.content && Array.isArray(data.content) &&
-          data.content.some((c: any) => c.type === 'text' && c.text && c.text.length > 0)
+        const textContent = data.content && Array.isArray(data.content) &&
+          data.content.find((c: any) => c.type === 'text' && c.text)
+        const text = textContent?.text || ''
+
+        // 检查文本内容是否包含"无法看图"等错误提示
+        const cannotSeeImages = /don't have the ability to see|cannot see|can't see|unable to see|do not have the ability|no vision|no visual/i.test(text)
+
+        const hasValidContent = text.length > 0 && !cannotSeeImages
         return {
           capability: 'vision',
           supported: hasValidContent,
           latency,
-          message: hasValidContent ? '模型支持视觉理解' : 'API 返回无效响应'
+          message: hasValidContent ? '模型支持视觉理解' : (cannotSeeImages ? '模型回复无法识别图片' : 'API 返回无效响应')
         }
       } else {
         const errorText = await response.text()
@@ -456,13 +462,17 @@ export class ProviderService {
       if (response.ok) {
         const data = await response.json() as any
         // OpenAI: 检查是否有有效的 message.content
-        const hasValidContent = data.choices && data.choices[0]?.message?.content &&
-          data.choices[0].message.content.length > 0
+        const content = data.choices?.[0]?.message?.content || ''
+
+        // 检查文本内容是否包含"无法看图"等错误提示
+        const cannotSeeImages = /don't have the ability to see|cannot see|can't see|unable to see|do not have the ability|no vision|no visual/i.test(content)
+
+        const hasValidContent = content.length > 0 && !cannotSeeImages
         return {
           capability: 'vision',
           supported: hasValidContent,
           latency,
-          message: hasValidContent ? '模型支持视觉理解' : 'API 返回无效响应'
+          message: hasValidContent ? '模型支持视觉理解' : (cannotSeeImages ? '模型回复无法识别图片' : 'API 返回无效响应')
         }
       } else {
         const errorText = await response.text()
