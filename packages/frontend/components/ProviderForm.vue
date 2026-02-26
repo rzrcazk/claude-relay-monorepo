@@ -257,6 +257,7 @@ watch(selectedProviderType, (newType) => {
     if (config) {
       form.value.name = config.name
       form.value.baseUrl = config.baseUrl || ''
+      form.value.type = config.type
       // 自动添加预设模型
       form.value.models = [...config.models]
     }
