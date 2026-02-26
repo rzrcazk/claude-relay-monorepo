@@ -25,7 +25,7 @@ export class ProviderEngine {
 
     // 2. MiniMax 使用 Anthropic 兼容 API，直接使用 MinimaxEngine
     if (provider.type === 'minimax') {
-      const minimaxEngine = new MinimaxEngine(apiKey.key, provider.endpoint)
+      const minimaxEngine = new MinimaxEngine(apiKey.key, provider.baseUrl)
       const result = await minimaxEngine.processRequest(request)
       return ResponseWrapper.wrap(result)
     }
@@ -33,10 +33,8 @@ export class ProviderEngine {
     // 3. 其他供应商使用转换器
     if (transformer.initializeClient && apiKey) {
       const options = {
-        // OpenAI 兼容的供应商需要设置 baseUrl
-        baseUrl: provider.type === 'openai'
-          ? provider.endpoint.replace(/\/chat\/completions$/, '')
-          : undefined
+        // 所有供应商都使用 baseUrl
+        baseUrl: provider.baseUrl
       }
       transformer.initializeClient(apiKey.key, options)
     }

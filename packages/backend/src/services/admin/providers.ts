@@ -34,7 +34,7 @@ export class ProviderService {
   // 添加模型供应商
   async addProvider(request: AddProviderRequest): Promise<ModelProvider> {
     // 检查是否已存在
-    const exists = await this.providerRepo.exists(request.name, request.endpoint)
+    const exists = await this.providerRepo.exists(request.name, request.baseUrl)
     if (exists) {
       throw new HTTPException(400, { message: '供应商名称或端点已存在' })
     }
@@ -44,7 +44,7 @@ export class ProviderService {
       id: Date.now().toString(),
       name: request.name,
       type: request.type,
-      endpoint: request.endpoint,
+      baseUrl: request.baseUrl,
       models: request.models,
       transformer: request.transformer,
       description: request.description,  // 可选的描述字段
@@ -73,7 +73,7 @@ export class ProviderService {
     const updatedProvider: ModelProvider = {
       ...existingProvider,
       name: request.name,
-      endpoint: request.endpoint,
+      baseUrl: request.baseUrl,
       models: request.models,
       transformer: request.transformer || 'claude-to-openai',
       // 如果提供了 description，则更新；否则保持原值
@@ -445,9 +445,10 @@ export class ProviderService {
       body.max_tokens = 300
     }
 
-    // 直接使用用户配置的 endpoint，不再追加路径
-    // 用户应该配置完整的 API 路径，如 https://api.openai.com/v1/chat/completions
-    const response = await fetch(provider.endpoint, {
+    // 根据 provider.type 自动添加正确的后缀
+    const baseUrl = provider.baseUrl.replace(/\/$/, '')
+    const url = `${baseUrl}/v1/chat/completions`
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -499,7 +500,12 @@ export class ProviderService {
       max_tokens: isVision ? 300 : 1024
     }
 
-    const response = await fetch(provider.endpoint, {
+    // 根据 provider.type 自动添加正确的后缀
+    const baseUrl = provider.baseUrl.replace(/\/$/, '')
+    const url = provider.type === 'minimax'
+      ? `${baseUrl}/v1/text/chatcompletion_v2`
+      : `${baseUrl}/v1/messages`
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -556,7 +562,7 @@ export class ProviderService {
 
     // 使用 v1beta 接口
     const geminiModel = model.startsWith('gemini-') ? model : `models/${model}`
-    const url = `${provider.endpoint.replace(/\/$/, '')}/${geminiModel}:generateContent?key=${apiKey}`
+    const url = `${provider.baseUrl.replace(/\/$/, '')}/${geminiModel}:generateContent?key=${apiKey}`
 
     const body = {
       contents,

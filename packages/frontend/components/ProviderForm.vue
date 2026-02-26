@@ -36,18 +36,33 @@
                :placeholder="isEdit ? '供应商名称' : `例如：我的${currentProviderConfig?.name}账号`">
       </div>
 
-      <!-- API 端点 -->
+      <!-- API Base URL -->
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-2">
-          API 端点 <span class="text-red-500">*</span>
+          API Base URL <span class="text-red-500">*</span>
         </label>
-        <input type="url" 
-               v-model="form.endpoint"
+        <input type="url"
+               v-model="form.baseUrl"
                required
                :readonly="isEndpointReadonly"
                class="block w-full px-3 py-3 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200"
                :class="{ 'bg-gray-50': isEndpointReadonly }"
-               placeholder="https://api.example.com/v1/chat/completions">
+               placeholder="https://api.example.com">
+      </div>
+
+      <!-- 供应商类型 (自定义时显示) -->
+      <div v-if="showTypeSelector">
+        <label class="block text-sm font-medium text-gray-700 mb-2">
+          供应商类型 <span class="text-red-500">*</span>
+        </label>
+        <select v-model="form.type"
+                required
+                class="block w-full px-3 py-3 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200">
+          <option value="openai">OpenAI 兼容</option>
+          <option value="gemini">Google Gemini</option>
+          <option value="modelscope">魔搭 (Anthropic 兼容)</option>
+          <option value="minimax">MiniMax</option>
+        </select>
       </div>
 
       <!-- 模型管理 -->
@@ -187,7 +202,8 @@ const customModel = ref('')
 
 const form = ref({
   name: props.provider?.name || '',
-  endpoint: props.provider?.endpoint || '',
+  type: props.provider?.type || 'openai',
+  baseUrl: props.provider?.baseUrl || '',
   models: props.provider?.models || [],
   description: props.provider?.description || ''
 })
@@ -225,8 +241,14 @@ const availableModels = computed(() => {
 const isEndpointReadonly = computed(() => {
   // 编辑模式下可以编辑
   if (isEdit.value) return false
-  // 对于预定义供应商，端点是只读的
+  // 对于预定义供应商，baseUrl 是只读的
   return currentProviderConfig.value?.isPreset || false
+})
+
+// 是否显示供应商类型选择器（自定义供应商时）
+const showTypeSelector = computed(() => {
+  // 新增模式且选择了非预设供应商
+  return !isEdit.value && selectedProviderType.value === 'openai'
 })
 
 // 监听选择的供应商类型，自动填充配置
@@ -235,7 +257,7 @@ watch(selectedProviderType, (newType) => {
     const config = PROVIDER_CONFIGS[newType as keyof typeof PROVIDER_CONFIGS]
     if (config) {
       form.value.name = config.name
-      form.value.endpoint = config.endpoint || ''
+      form.value.baseUrl = config.baseUrl || ''
       // 自动添加预设模型
       form.value.models = [...config.models]
     }
@@ -254,11 +276,11 @@ const handleSubmit = () => {
     alert('请至少添加一个模型')
     return
   }
-  
+
   if (isEdit.value) {
     const editData: EditProviderRequest = {
       name: form.value.name,
-      endpoint: form.value.endpoint,
+      baseUrl: form.value.baseUrl,
       models: form.value.models,
       description: form.value.description
     }
@@ -266,11 +288,11 @@ const handleSubmit = () => {
   } else {
     const config = currentProviderConfig.value
     if (!config) return
-    
+
     const addData: AddProviderRequest = {
       name: form.value.name,
-      type: config.type,
-      endpoint: form.value.endpoint,
+      type: form.value.type || config.type,
+      baseUrl: form.value.baseUrl,
       models: form.value.models,
       transformer: config.transformer,
       description: form.value.description
@@ -286,7 +308,8 @@ const handleCancel = () => {
     selectedProviderType.value = null
     form.value = {
       name: '',
-      endpoint: '',
+      type: 'openai',
+      baseUrl: '',
       models: [],
       description: ''
     }
@@ -299,7 +322,8 @@ const resetForm = () => {
   selectedProviderType.value = null
   form.value = {
     name: '',
-    endpoint: '',
+    type: 'openai',
+    baseUrl: '',
     models: [],
     description: ''
   }

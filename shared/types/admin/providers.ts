@@ -5,30 +5,30 @@
 export interface ModelProvider {
   id: string
   name: string
-  type: 'openai' | 'gemini' | 'minimax' | 'modelscope'
-  endpoint: string
+  type: 'openai' | 'anthropic' | 'gemini'
+  baseUrl: string
   models: string[]  // 支持的模型列表
   status: 'active' | 'inactive'
   createdAt: string
   updatedAt: string
   description?: string  // 可选的备注描述
-  transformer?: 'claude-to-openai' | 'claude-to-gemini' | 'claude-to-minimax' | 'claude-to-modelscope'  // 可选，默认 'claude-to-openai'
+  transformer?: 'claude-to-openai' | 'claude-to-anthropic' | 'claude-to-gemini'  // 可选，默认 'claude-to-openai'
 }
 
 export interface AddProviderRequest {
   name: string
-  type: 'openai' | 'gemini' | 'minimax' | 'modelscope'
-  endpoint: string
+  type: 'openai' | 'anthropic' | 'gemini'
+  baseUrl: string
   models: string[]  // 支持的模型列表
-  transformer?: 'claude-to-openai' | 'claude-to-gemini' | 'claude-to-minimax' | 'claude-to-modelscope'
+  transformer?: 'claude-to-openai' | 'claude-to-anthropic' | 'claude-to-gemini'
   description?: string  // 可选的备注描述字段
 }
 
 export interface EditProviderRequest {
   name: string
-  endpoint: string
+  baseUrl: string
   models: string[]  // 支持的模型列表
-  transformer?: 'claude-to-openai' | 'claude-to-gemini' | 'claude-to-minimax' | 'claude-to-modelscope'
+  transformer?: 'claude-to-openai' | 'claude-to-anthropic' | 'claude-to-gemini'
   description?: string  // 可选的备注描述字段，不做校验
 }
 
@@ -37,11 +37,11 @@ export interface ProviderConfig {
   name: string
   description: string
   icon: string
-  type: 'openai' | 'gemini' | 'minimax' | 'modelscope'
-  endpoint: string
+  type: 'openai' | 'anthropic' | 'gemini'
+  baseUrl: string
   models: string[]
   helpText: string
-  transformer: 'claude-to-openai' | 'claude-to-gemini' | 'claude-to-minimax' | 'claude-to-modelscope'
+  transformer: 'claude-to-openai' | 'claude-to-anthropic' | 'claude-to-gemini'
   isPreset: boolean  // 是否为预定义供应商
 }
 

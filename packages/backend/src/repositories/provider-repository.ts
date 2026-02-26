@@ -61,8 +61,8 @@ export class ProviderRepository {
   }
 
   // 检查供应商是否存在
-  async exists(name: string, endpoint: string): Promise<boolean> {
+  async exists(name: string, baseUrl: string): Promise<boolean> {
     const providers = await this.getAll()
-    return providers.some(p => p.name === name || p.endpoint === endpoint)
+    return providers.some(p => p.name === name || p.baseUrl === baseUrl)
   }
 }

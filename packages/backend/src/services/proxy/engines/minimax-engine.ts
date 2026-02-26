@@ -9,16 +9,17 @@ import { HTTPException } from 'hono/http-exception'
 
 export class MinimaxEngine implements Engine {
   private apiKey: string
-  private endpoint: string
+  private baseUrl: string
 
-  constructor(apiKey: string, endpoint: string = 'https://api.minimaxi.com/anthropic') {
+  constructor(apiKey: string, baseUrl: string = 'https://api.minimax.chat') {
     this.apiKey = apiKey
-    this.endpoint = endpoint
+    this.baseUrl = baseUrl.replace(/\/$/, '')
   }
 
   async processRequest(request: MessageCreateParamsBase): Promise<Response> {
-    // 转发请求到 MiniMax Anthropic 兼容 API
-    const response = await fetch(this.endpoint, {
+    // 使用 baseUrl + 后缀构建完整 URL
+    const url = `${this.baseUrl}/v1/text/chatcompletion_v2`
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,
