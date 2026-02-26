@@ -23,14 +23,14 @@ providerRoutes.get('/providers', async (c) => {
 // 添加模型供应商
 providerRoutes.post('/providers',
   validator('json', (value: any): AddProviderRequest => {
-    const { name, type, endpoint, models } = value
-    
-    if (!name || !type || !endpoint || !models) {
+    const { name, type, baseUrl, models } = value
+
+    if (!name || !type || !baseUrl || !models) {
       throw new HTTPException(400, {
         message: '缺少必填字段'
       })
     }
-    
+
     return value
   }),
   async (c) => {
@@ -54,14 +54,14 @@ providerRoutes.put('/providers/:id',
     return value
   }),
   validator('json', (value: any): EditProviderRequest => {
-    const { name, endpoint, models } = value
-    
-    if (!name || !endpoint || !models || !Array.isArray(models)) {
+    const { name, baseUrl, models } = value
+
+    if (!name || !baseUrl || !models || !Array.isArray(models)) {
       throw new HTTPException(400, {
         message: '缺少必填字段或格式错误'
       })
     }
-    
+
     return value
   }),
   async (c) => {
