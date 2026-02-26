@@ -19,7 +19,7 @@ export class KeyPoolManager {
   /**
    * 获取或创建 Key Pool
    */
-  async getOrCreatePool(providerId: string, providerType: 'openai' | 'gemini' | 'minimax' | 'modelscope'): Promise<BaseKeyPool> {
+  async getOrCreatePool(providerId: string, providerType: 'openai' | 'gemini' | 'anthropic'): Promise<BaseKeyPool> {
     // 检查缓存
     if (this.pools.has(providerId)) {
       return this.pools.get(providerId)!
@@ -44,13 +44,12 @@ export class KeyPoolManager {
    * 创建特定类型的 Key Pool
    * MiniMax 使用 Anthropic 兼容 API，复用 OpenAIKeyPool
    */
-  private createPool(providerId: string, providerType: 'openai' | 'gemini' | 'minimax' | 'modelscope'): BaseKeyPool {
+  private createPool(providerId: string, providerType: 'openai' | 'gemini' | 'anthropic'): BaseKeyPool {
     switch (providerType) {
       case 'gemini':
         return new GeminiKeyPool(providerId, this.kv)
-      case 'minimax':
-      case 'modelscope':
-        // MiniMax 和 ModelScope 使用 Anthropic 兼容 API，复用 OpenAIKeyPool
+      case 'anthropic':
+        // Anthropic 兼容 API，复用 OpenAIKeyPool
         return new OpenAIKeyPool(providerId, this.kv)
       case 'openai':
       default:
@@ -159,7 +158,7 @@ export class KeyPoolManager {
   /**
    * 记录成功的请求统计
    */
-  async recordSuccess(providerId: string, providerType: 'openai' | 'gemini' | 'minimax' | 'modelscope', keyId: string): Promise<void> {
+  async recordSuccess(providerId: string, providerType: 'openai' | 'gemini' | 'anthropic', keyId: string): Promise<void> {
     const pool = await this.getOrCreatePool(providerId, providerType)
     await pool.updateKeyStats(keyId, true)
   }

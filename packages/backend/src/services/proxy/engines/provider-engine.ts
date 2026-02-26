@@ -23,8 +23,8 @@ export class ProviderEngine {
     const resolution = await this.providerResolver.resolve(request)
     const { provider, selectedModel, apiKey, transformer } = resolution
 
-    // 2. MiniMax 使用 Anthropic 兼容 API，直接使用 MinimaxEngine
-    if (provider.type === 'minimax') {
+    // 2. Anthropic 兼容供应商使用 MinimaxEngine
+    if (provider.type === 'anthropic') {
       const minimaxEngine = new MinimaxEngine(apiKey.key, provider.baseUrl)
       const result = await minimaxEngine.processRequest(request)
       return ResponseWrapper.wrap(result)

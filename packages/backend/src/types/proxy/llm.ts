@@ -10,7 +10,7 @@ export interface LLMProvider {
   apiUrl: string
   model: string
   transformer: any // 对应的转换器实例
-  type: 'openai' | 'gemini' | 'minimax'
+  type: 'openai' | 'anthropic' | 'gemini'
 }
 
 /**

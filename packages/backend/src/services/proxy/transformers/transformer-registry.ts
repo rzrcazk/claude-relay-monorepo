@@ -6,7 +6,7 @@
 import type { Transformer } from './base-transformer'
 import { ClaudeToOpenAITransformer } from './claude-to-openai'
 import { ClaudeToGeminiTransformer } from './claude-to-gemini'
-import { ClaudeToModelScopeTransformer } from './claude-to-modelscope'
+import { ClaudeToModelScopeTransformer } from './claude-to-anthropic'
 
 export class TransformerRegistry {
   private static instance: TransformerRegistry
@@ -34,7 +34,7 @@ export class TransformerRegistry {
     // 使用基于官方 SDK 的 OpenAI 转换器
     this.register('claude-to-openai', new ClaudeToOpenAITransformer())
     this.register('claude-to-gemini', new ClaudeToGeminiTransformer())
-    this.register('claude-to-modelscope', new ClaudeToModelScopeTransformer())
+    this.register('claude-to-anthropic', new ClaudeToModelScopeTransformer())
   }
 
   /**

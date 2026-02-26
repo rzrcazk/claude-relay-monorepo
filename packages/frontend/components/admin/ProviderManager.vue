@@ -29,8 +29,8 @@
                 <h4 class="text-lg font-bold text-gray-900">{{ provider.name }}</h4>
                 <p class="text-sm text-gray-500">
                   <span v-if="provider.type === 'openai'">OpenAI 兼容模型</span>
+                  <span v-else-if="provider.type === 'anthropic'">Anthropic 兼容模型</span>
                   <span v-else-if="provider.type === 'gemini'">Google Gemini 模型</span>
-                  <span v-else>{{ provider.type }} 模型</span>
                 </p>
               </div>
             </div>

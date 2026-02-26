@@ -59,9 +59,8 @@
                 required
                 class="block w-full px-3 py-3 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition duration-200">
           <option value="openai">OpenAI 兼容</option>
+          <option value="anthropic">Anthropic 兼容</option>
           <option value="gemini">Google Gemini</option>
-          <option value="modelscope">魔搭 (Anthropic 兼容)</option>
-          <option value="minimax">MiniMax</option>
         </select>
       </div>
 

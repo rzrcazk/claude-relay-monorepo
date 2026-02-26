@@ -183,7 +183,7 @@ export class ProviderService {
       if (provider.type === 'gemini') {
         // Gemini 使用 Google Generative AI SDK
         response = await this.callGeminiApi(provider, apiKey.key, request.model, testMessages)
-      } else if (provider.type === 'modelscope' || provider.type === 'minimax') {
+      } else if (provider.type === 'anthropic') {
         // ModelScope 和 MiniMax 使用 Anthropic 兼容 API
         response = await this.callAnthropicApi(provider, apiKey.key, request.model, testMessages)
       } else {
@@ -264,7 +264,7 @@ export class ProviderService {
       let response: Response
       if (provider.type === 'gemini') {
         response = await this.callGeminiApi(provider, apiKey.key, request.model, testMessages, true)
-      } else if (provider.type === 'modelscope' || provider.type === 'minimax') {
+      } else if (provider.type === 'anthropic') {
         // ModelScope 和 MiniMax 使用 Anthropic 兼容 API
         response = await this.callAnthropicApi(provider, apiKey.key, request.model, testMessages, true)
       } else {
@@ -361,7 +361,7 @@ export class ProviderService {
 
       if (provider.type === 'gemini') {
         response = await this.callGeminiApi(provider, apiKey.key, request.model, testMessages, isVision)
-      } else if (provider.type === 'modelscope' || provider.type === 'minimax') {
+      } else if (provider.type === 'anthropic') {
         response = await this.callAnthropicApi(provider, apiKey.key, request.model, testMessages, isVision)
       } else {
         response = await this.callOpenAIApi(provider, apiKey.key, request.model, testMessages, isVision)
@@ -409,7 +409,7 @@ export class ProviderService {
         return data.candidates[0].content.parts.map((p: any) => p.text).join('')
       }
       return JSON.stringify(data)
-    } else if (providerType === 'modelscope' || providerType === 'minimax') {
+    } else if (providerType === 'anthropic') {
       // Anthropic 兼容格式
       if (data.content && data.content[0]?.text) {
         return data.content[0].text
@@ -502,7 +502,7 @@ export class ProviderService {
 
     // 根据 provider.type 自动添加正确的后缀
     const baseUrl = provider.baseUrl.replace(/\/$/, '')
-    const url = provider.type === 'minimax'
+    const url = provider.type === 'anthropic'
       ? `${baseUrl}/v1/text/chatcompletion_v2`
       : `${baseUrl}/v1/messages`
     const response = await fetch(url, {
