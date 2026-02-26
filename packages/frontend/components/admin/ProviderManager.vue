@@ -204,10 +204,11 @@
             :model="selectedTestModel"
             :provider-id="testingProvider.id"
             :supported="getCapabilityResult(testingProvider.id, selectedTestModel, cap)"
-            :loading="detectingCapability === `${testingProvider.id}_${selectedTestModel}_${cap}`"
-            @detect="(capability) => testingProvider && handleDetectCapability(testingProvider, selectedTestModel, capability)"
+            @fill="handleFillPrompt"
+            @toggle="(cap) => testingProvider && handleToggleCapability(testingProvider.id, selectedTestModel, cap)"
           />
         </div>
+        <p class="text-xs text-gray-400 pt-1">点击标签填充测试提示词，再次点击切换支持/不支持</p>
       </div>
 
       <!-- 聊天消息区域 -->
@@ -292,7 +293,7 @@
 <script setup lang="ts">
 import { useProviders } from '../../composables/useProviders'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
-import ModelCapabilityTag from './ModelCapabilityTag.vue'
+import ModelCapabilityTag, { CAPABILITY_PROMPTS } from './ModelCapabilityTag.vue'
 import type { CapabilityType } from '../../../shared/types/admin/providers'
 
 // 使用 composable 来管理供应商相关逻辑
@@ -340,17 +341,28 @@ const {
 // 能力类型列表
 const capabilityTypes: CapabilityType[] = ['thinking', 'web_search', 'vision', 'long_context']
 
-// 能力检测状态
-const detectingCapability = ref<string | null>(null)
-
-// 处理能力检测
-const handleDetectCapability = async (provider: NonNullable<typeof testingProvider.value>, model: string, capability: CapabilityType) => {
-  if (!provider) return
-  detectingCapability.value = `${provider.id}_${model}_${capability}`
-  try {
-    await detectCapability(provider.id, model, capability)
-  } finally {
-    detectingCapability.value = null
+// 填充测试提示词到消息框
+const handleFillPrompt = (capability: CapabilityType) => {
+  const prompt = CAPABILITY_PROMPTS[capability]
+  if (prompt.image) {
+    // 视觉测试 - 填充图片
+    chatImage.value = prompt.image
+  } else {
+    chatImage.value = null
   }
+  chatInput.value = prompt.message
+}
+
+// 切换能力标记状态
+const handleToggleCapability = (providerId: string, model: string, capability: CapabilityType) => {
+  const currentResult = getCapabilityResult(providerId, model, capability)
+  const newSupported = currentResult === null ? false : !currentResult
+
+  // 更新状态
+  if (!capabilityResults.value.has(providerId)) {
+    capabilityResults.value.set(providerId, new Map())
+  }
+  const providerResults = capabilityResults.value.get(providerId)!
+  providerResults.set(`${model}_${capability}`, newSupported)
 }
 </script>

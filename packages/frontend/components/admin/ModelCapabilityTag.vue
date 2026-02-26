@@ -1,14 +1,12 @@
 <template>
   <button
     @click="handleClick"
-    :disabled="loading"
     :class="[
       'inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all duration-200',
       'hover:scale-105 active:scale-95',
-      buttonClass,
-      loading ? 'opacity-50 cursor-wait' : ''
+      buttonClass
     ]"
-    :title="loading ? '检测中...' : buttonTitle"
+    :title="buttonTitle"
   >
     <!-- 图标 -->
     <svg v-if="capability === 'thinking'" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -28,14 +26,8 @@
     <!-- 标签文字 -->
     <span>{{ label }}</span>
 
-    <!-- 加载指示器 -->
-    <svg v-if="loading" class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-    </svg>
-
-    <!-- 结果指示 -->
-    <span v-else-if="supported === true" class="text-green-600">✓</span>
+    <!-- 状态指示 -->
+    <span v-if="supported === true" class="text-green-600">✓</span>
     <span v-else-if="supported === false" class="text-red-500">✗</span>
   </button>
 </template>
@@ -44,21 +36,37 @@
 import { computed } from 'vue'
 import type { CapabilityType } from '../../../shared/types/admin/providers'
 
+// 预设测试提示词
+export const CAPABILITY_PROMPTS: Record<CapabilityType, { message: string; image?: string }> = {
+  vision: {
+    message: '这张图片里有什么？请描述你看到的内容。',
+    // 1x1 透明 PNG
+    image: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+  },
+  thinking: {
+    message: '请详细思考并回答：为什么天空是蓝色的？请展示你的思考过程。'
+  },
+  web_search: {
+    message: '搜索一下今天北京天气怎么样？'
+  },
+  long_context: {
+    message: '请详细解释一下什么是量子计算？'
+  }
+}
+
 interface Props {
   capability: CapabilityType
   model: string
   providerId: string
-  supported: boolean | null  // null = 未检测, true = 支持, false = 不支持
-  loading?: boolean
+  supported: boolean | null  // null = 未标记, true = 支持, false = 不支持
 }
 
 interface Emits {
-  (e: 'detect', capability: CapabilityType): void
+  (e: 'fill', capability: CapabilityType): void  // 填充消息框
+  (e: 'toggle', capability: CapabilityType): void   // 切换状态
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  loading: false
-})
+const props = defineProps<Props>()
 
 const emit = defineEmits<Emits>()
 
@@ -70,10 +78,10 @@ const capabilityLabels: Record<CapabilityType, string> = {
 }
 
 const capabilityTitles: Record<CapabilityType, string> = {
-  thinking: '点击检测深度思考能力',
-  web_search: '点击检测联网搜索能力',
-  vision: '点击检测视觉理解能力',
-  long_context: '点击检测长上下文能力'
+  thinking: '点击填充思考测试提示词',
+  web_search: '点击填充联网测试提示词',
+  vision: '点击填充视觉测试提示词',
+  long_context: '点击填充长文本测试提示词'
 }
 
 const label = computed(() => capabilityLabels[props.capability])
@@ -81,12 +89,8 @@ const buttonTitle = computed(() => capabilityTitles[props.capability])
 
 // 按钮样式
 const buttonClass = computed(() => {
-  if (props.loading) {
-    return 'bg-gray-100 text-gray-500'
-  }
-
   if (props.supported === null) {
-    // 未检测状态 - 灰色
+    // 未标记状态 - 灰色
     return 'bg-gray-100 text-gray-600 hover:bg-gray-200'
   }
 
@@ -100,8 +104,9 @@ const buttonClass = computed(() => {
 })
 
 const handleClick = () => {
-  if (!props.loading) {
-    emit('detect', props.capability)
-  }
+  // 填充消息框
+  emit('fill', props.capability)
+  // 切换状态
+  emit('toggle', props.capability)
 }
 </script>
