@@ -502,9 +502,13 @@ export class ProviderService {
 
     // 根据 provider.type 自动添加正确的后缀
     const baseUrl = provider.baseUrl.replace(/\/$/, '')
-    const url = provider.type === 'anthropic'
-      ? `${baseUrl}/v1/text/chatcompletion_v2`
-      : `${baseUrl}/v1/messages`
+    // MiniMax 使用不同的 API 路径
+    const isMinimax = baseUrl.includes('minimaxi')
+    const url = provider.type === 'anthropic' && !isMinimax
+      ? `${baseUrl}/v1/messages`
+      : isMinimax
+        ? `${baseUrl}/v1/text/chatcompletion_v2`
+        : `${baseUrl}/v1/messages`
     const response = await fetch(url, {
       method: 'POST',
       headers: {
