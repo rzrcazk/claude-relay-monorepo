@@ -3,26 +3,14 @@
  */
 
 export const PROVIDER_CONFIGS = {
-  // 预定义供应商 - 魔搭 (OpenAI 兼容模式)
+  // 预定义供应商 - 魔搭 (Anthropic SDK 模式)
   modelscope: {
-    name: '魔搭社区 (OpenAI)',
-    description: '阿里云魔搭社区提供的大语言模型服务 (OpenAI 兼容模式)',
+    name: '魔搭社区',
+    description: '阿里云魔搭社区提供的大语言模型服务 (Anthropic SDK 兼容模式)',
     icon: 'from-blue-500 to-purple-600',
-    type: 'openai' as const,
-    endpoint: 'https://api-inference.modelscope.cn/v1/chat/completions',
-    models: ['Qwen/Qwen3.5-397B-A17B', 'moonshotai/Kimi-K2.5'],
-    helpText: '请前往 https://www.modelscope.cn/ 注册并获取 API Key',
-    transformer: 'claude-to-openai' as const,
-    isPreset: true
-  },
-  // 预定义供应商 - 魔搭 (Claude SDK 模式)
-  'modelscope-claude': {
-    name: '魔搭社区 (Claude)',
-    description: '阿里云魔搭社区提供的大语言模型服务 (Claude SDK 兼容模式)',
-    icon: 'from-blue-500 to-purple-600',
-    type: 'modelscope-claude' as const,
+    type: 'modelscope' as const,
     endpoint: 'https://api-inference.modelscope.cn',
-    models: ['Qwen/Qwen3.5-397B-A17B', 'moonshotai/Kimi-K2.5'],
+    models: ['Qwen/Qwen3.5-397B-A17B', 'Qwen/Qwen2.5-7B-Instruct', 'moonshotai/Kimi-K2.5'],
     helpText: '请前往 https://www.modelscope.cn/ 注册并获取 API Key',
     transformer: 'claude-to-modelscope' as const,
     isPreset: true
@@ -39,7 +27,7 @@ export const PROVIDER_CONFIGS = {
     transformer: 'claude-to-gemini' as const,
     isPreset: true
   },
-  // 预定义供应商 - MiniMax
+  // 预定义供应商 - MiniMax (Anthropic SDK 模式)
   minimax: {
     name: 'MiniMax',
     description: 'MiniMax M2.5 系列模型，支持 Anthropic 兼容 API',

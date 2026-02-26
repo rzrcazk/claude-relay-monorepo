@@ -183,8 +183,11 @@ export class ProviderService {
       if (provider.type === 'gemini') {
         // Gemini 使用 Google Generative AI SDK
         response = await this.callGeminiApi(provider, apiKey.key, request.model, testMessages)
+      } else if (provider.type === 'modelscope' || provider.type === 'minimax') {
+        // ModelScope 和 MiniMax 使用 Anthropic 兼容 API
+        response = await this.callAnthropicApi(provider, apiKey.key, request.model, testMessages)
       } else {
-        // OpenAI 兼容的 API (包括 MiniMax)
+        // OpenAI 兼容的 API
         response = await this.callOpenAIApi(provider, apiKey.key, request.model, testMessages)
       }
 
@@ -261,6 +264,9 @@ export class ProviderService {
       let response: Response
       if (provider.type === 'gemini') {
         response = await this.callGeminiApi(provider, apiKey.key, request.model, testMessages, true)
+      } else if (provider.type === 'modelscope' || provider.type === 'minimax') {
+        // ModelScope 和 MiniMax 使用 Anthropic 兼容 API
+        response = await this.callAnthropicApi(provider, apiKey.key, request.model, testMessages, true)
       } else {
         response = await this.callOpenAIApi(provider, apiKey.key, request.model, testMessages, true)
       }
@@ -332,6 +338,59 @@ export class ProviderService {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify(body)
+    })
+
+    return response
+  }
+
+  /**
+   * 调用 Anthropic 兼容 API (ModelScope / MiniMax)
+   */
+  private async callAnthropicApi(
+    provider: ModelProvider,
+    apiKey: string,
+    model: string,
+    messages: any[],
+    isVision: boolean = false
+  ): Promise<Response> {
+    // 构建 Anthropic 格式的请求体
+    const body: any = {
+      model,
+      messages: messages.map(msg => {
+        // 将 OpenAI 格式的消息转换为 Anthropic 格式
+        if (Array.isArray(msg.content)) {
+          return {
+            role: msg.role,
+            content: msg.content.map(c => {
+              if (c.type === 'text') {
+                return { type: 'text', text: c.text }
+              } else if (c.type === 'image') {
+                return {
+                  type: 'image',
+                  source: {
+                    type: c.source?.type || 'base64',
+                    media_type: c.source?.media_type || 'image/png',
+                    data: c.source?.data
+                  }
+                }
+              }
+              return c
+            })
+          }
+        }
+        return msg
+      }),
+      max_tokens: isVision ? 300 : 1024
+    }
+
+    const response = await fetch(provider.endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify(body)
     })
