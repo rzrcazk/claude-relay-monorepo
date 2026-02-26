@@ -293,7 +293,8 @@
 <script setup lang="ts">
 import { useProviders } from '../../composables/useProviders'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
-import ModelCapabilityTag, { CAPABILITY_PROMPTS } from './ModelCapabilityTag.vue'
+import ModelCapabilityTag from './ModelCapabilityTag.vue'
+import { CAPABILITY_PROMPTS } from '../../constants/capabilityPrompts'
 import type { CapabilityType } from '../../../shared/types/admin/providers'
 
 // 使用 composable 来管理供应商相关逻辑
