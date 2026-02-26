@@ -411,8 +411,16 @@ export class ProviderService {
       return JSON.stringify(data)
     } else if (providerType === 'anthropic') {
       // Anthropic 兼容格式
-      if (data.content && data.content[0]?.text) {
-        return data.content[0].text
+      if (data.content && Array.isArray(data.content)) {
+        // 优先找 text 类型的内容
+        const textContent = data.content.find((c: any) => c.type === 'text')
+        if (textContent?.text) {
+          return textContent.text
+        }
+        // 如果没有 text 类型，取第一个有效内容
+        if (data.content[0]?.text) {
+          return data.content[0].text
+        }
       }
       return JSON.stringify(data)
     } else {
