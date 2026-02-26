@@ -242,8 +242,9 @@ export const useProviders = () => {
 
   // 发送聊天消息
   const sendChat = async () => {
-    if (!testingProvider.value || !selectedTestModel.value || !chatInput.value.trim()) return
-    if (chatTab.value === 'image' && !chatImage.value) return
+    if (!testingProvider.value || !selectedTestModel.value) return
+    // 至少需要有文字或图片
+    if (!chatInput.value.trim() && !chatImage.value) return
 
     chatLoading.value = true
 

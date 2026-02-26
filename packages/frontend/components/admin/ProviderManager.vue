@@ -186,19 +186,6 @@
         </button>
       </div>
 
-      <!-- Tab 切换 -->
-      <div class="flex border-b">
-        <button
-          @click="chatTab = 'text'"
-          :class="chatTab === 'text' ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
-          class="flex-1 py-3 text-center font-medium border-b-2 transition-colors"
-        >纯文本</button>
-        <button
-          @click="chatTab = 'image'"
-          :class="chatTab === 'image' ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
-          class="flex-1 py-3 text-center font-medium border-b-2 transition-colors"
-        >带图</button>
-      </div>
 
       <!-- 供应商信息和模型选择 -->
       <div class="px-6 py-3 bg-gray-50 border-b space-y-2">
@@ -263,36 +250,37 @@
 
       <!-- 输入区域 -->
       <div class="p-4 border-t bg-white rounded-b-2xl space-y-3">
-        <!-- 图片上传预览 -->
-        <div v-if="chatTab === 'image'" class="relative inline-block">
-          <div v-if="chatImage" class="flex items-center space-x-2 bg-gray-100 rounded-lg p-2">
-            <img :src="'data:image/png;base64,' + chatImage" class="h-16 w-16 object-cover rounded" />
+        <!-- 图片上传（始终显示） -->
+        <div class="flex items-center space-x-3">
+          <!-- 图片预览 -->
+          <div v-if="chatImage" class="relative flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
+            <img :src="'data:image/png;base64,' + chatImage" class="h-12 w-12 object-cover rounded" />
             <button @click="clearImage" class="text-gray-500 hover:text-red-500 p-1">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
               </svg>
             </button>
           </div>
-          <label v-else class="flex items-center justify-center w-16 h-16 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition-colors">
-            <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+
+          <!-- 图片上传按钮 -->
+          <label v-if="!chatImage" class="flex items-center justify-center w-10 h-10 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition-colors">
+            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
             </svg>
             <input type="file" accept="image/*" class="hidden" @change="(e) => { const file = (e.target as HTMLInputElement).files?.[0]; file && handleImageUpload(file) }" />
           </label>
-        </div>
 
-        <!-- 文本输入 -->
-        <div class="flex space-x-2">
+          <!-- 文本输入 -->
           <input
             v-model="chatInput"
             @keyup.enter="sendChat"
             type="text"
-            :placeholder="chatTab === 'image' ? '描述这张图片...' : '输入消息...'"
+            :placeholder="chatImage ? '描述这张图片...' : '输入消息...'"
             class="flex-1 px-4 py-2 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
           />
           <button
             @click="sendChat"
-            :disabled="chatLoading || !chatInput.trim() || (chatTab === 'image' && !chatImage)"
+            :disabled="chatLoading || (!chatInput.trim() && !chatImage)"
             class="px-6 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:from-orange-600 hover:to-orange-700 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >发送</button>
         </div>
