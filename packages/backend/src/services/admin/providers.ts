@@ -477,7 +477,7 @@ export class ProviderService {
         if (Array.isArray(msg.content)) {
           return {
             role: msg.role,
-            content: msg.content.map(c => {
+            content: msg.content.map((c: { type: string; text?: string; source?: any }) => {
               if (c.type === 'text') {
                 return { type: 'text', text: c.text }
               } else if (c.type === 'image') {
