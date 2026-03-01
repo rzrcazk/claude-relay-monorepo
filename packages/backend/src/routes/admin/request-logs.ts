@@ -6,7 +6,7 @@ import { Hono } from 'hono'
 import { RequestLogRepository } from '../../repositories'
 import { createSuccessResponse } from '../../utils/response'
 import type { Bindings } from '../../types/env'
-import type { GetRequestLogsQuery } from '../../../../shared/types/admin/request-logs'
+import type { GetRequestLogsQuery } from '@shared/types/admin/request-logs'
 
 const requestLogRoutes = new Hono<{ Bindings: Bindings }>()
 
