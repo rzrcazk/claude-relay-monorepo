@@ -134,3 +134,94 @@ function getFullUrl(provider: ModelProvider, model: string): string {
   <option value="minimax">MiniMax</option>
 </select>
 ```
+
+---
+
+# 请求日志面板 - 设计方案
+
+## 需求背景
+
+用户反馈：
+1. 没有地方看真正请求的渠道和模型
+2. 虽然有路由配置，但不知道请求走什么模型、有没有走通
+3. 能否一个请求拆分走多个模型？
+
+**核心问题**：系统不透明，用户无法感知路由决策
+
+---
+
+## 当前路由能力逻辑
+
+### 5 个路由维度
+
+| 维度 | 触发条件 | 配置字段 | 场景 |
+|:---|:---|:---|:---|
+| **longContext** | token 数 > longContextThreshold (默认 80000) | `rules.longContext` | 长文档、长对话 |
+| **background** | 请求 model 包含 `haiku` | `rules.background` | 轻量快速任务 |
+| **think** | 请求包含 `thinking: { type: 'enabled' }` | `rules.think` | 复杂推理、数学 |
+| **webSearch** | 请求 tools 包含 `web_search` 类型 | `rules.webSearch` | 需要联网查资料 |
+| **default** | 以上都不匹配 | `rules.default` | 默认 fallback |
+
+### 路由优先级
+
+从上到下依次判断，找到第一个匹配就返回：
+1. 逗号分隔模型 → 取第一个匹配规则
+2. 长上下文检查 (token 数)
+3. 后台任务检查 (haiku)
+4. 思考模型检查 (thinking)
+5. 网络搜索检查 (web_search tools)
+6. 默认模型
+
+---
+
+## 方案设计
+
+### 功能范围
+
+1. **请求日志记录**
+   - 每次 Claude API 请求时，记录路由决策
+   - 存储：请求时间、请求 ID、原始 model、实际路由到的供应商+模型、路由原因、请求结果
+
+2. **前端日志查看器**
+   - 列表展示历史请求
+   - 支持按时间范围筛选
+   - 点击查看详情
+
+### 技术方案
+
+#### 后端
+- 使用 Cloudflare KV 存储日志（TTL 7 天）
+- 新增 API 端点：`GET /api/admin/request-logs`
+- 每次代理请求时写入日志
+
+#### 前端
+- 新增页面：`/admin/request-logs`
+- 使用表格展示，支持分页
+
+### 数据结构
+
+```typescript
+interface RequestLog {
+  id: string
+  timestamp: string
+  // 请求信息
+  requestedModel: string
+  // 路由决策
+  selectedProvider: string
+  selectedModel: string
+  routeReason: string // 如 "token数 > 80000"
+  routeRule: 'default' | 'longContext' | 'background' | 'think' | 'webSearch'
+  // 请求结果
+  status: 'success' | 'error'
+  errorMessage?: string
+  duration: number // ms
+}
+```
+
+---
+
+## 待确认
+
+- [x] 日志保留 3 天（实际 1 天足够）
+- [x] 页面刷新即可，不需要实时推送
+- [x] 统计面板暂不需要

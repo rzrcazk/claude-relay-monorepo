@@ -30,8 +30,17 @@
               <span class="text-sm text-gray-700">当前:</span>
               <span class="text-sm font-medium text-orange-600">{{ currentModelDisplay }}</span>
             </div>
-            
-            <button @click="logout" 
+
+            <!-- 请求日志入口 -->
+            <NuxtLink to="/admin/request-logs"
+                       class="flex items-center space-x-2 text-gray-500 hover:text-orange-600 px-3 py-2 rounded-xl hover:bg-white/50 transition duration-200">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+              </svg>
+              <span class="text-sm">请求日志</span>
+            </NuxtLink>
+
+            <button @click="logout"
                     class="text-gray-500 hover:text-orange-600 px-3 py-2 rounded-xl hover:bg-white/50 transition duration-200">
               退出登录
             </button>
