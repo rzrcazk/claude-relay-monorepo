@@ -156,7 +156,29 @@ T-001 (类型定义)
 
 ## 确认状态
 
-- [ ] 方案确认: 用户已确认方向
-- [ ] 能力列表: thinking, web_search, vision, long_context
-- [ ] 触发方式: 点击标签检测
-- [ ] 反馈方式: 绿色/红色颜色标识
+- [x] 方案确认: 用户已确认方向
+- [x] 能力列表: thinking, web_search, vision, long_context
+- [x] 触发方式: 点击标签检测
+- [x] 反馈方式: 绿色/红色颜色标识
+
+---
+
+## 完成状态
+
+### T-001: 类型定义 ✅ DONE
+- 已在 `shared/types/admin/providers.ts` 实现
+
+### T-002: 后端 API ✅ DONE
+- 已在 `packages/backend/src/routes/admin/providers.ts` 实现 `POST /api/admin/providers/:id/detect-capability`
+
+### T-003: 后端服务 ✅ DONE
+- 已在 `packages/backend/src/services/admin/providers.ts` 实现检测逻辑
+
+### T-004: 前端组件 ✅ DONE
+- 已实现 `ModelCapabilityTag.vue` 组件
+
+### T-005: 集成到表单 ✅ DONE
+- 已集成到 ProviderForm
+
+### T-006: 前端 API ✅ DONE
+- 已在 useProviderApi.ts 实现
