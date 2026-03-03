@@ -16,7 +16,13 @@ export class MinimaxEngine implements Engine {
     this.baseUrl = baseUrl.replace(/\/$/, '')
   }
 
-  async processRequest(request: MessageCreateParamsBase): Promise<Response> {
+  async processRequest(request: MessageCreateParamsBase, targetModel?: string): Promise<Response> {
+    // 使用目标模型替换原始请求中的模型
+    const processedRequest = {
+      ...request,
+      model: targetModel || request.model
+    }
+
     // Anthropic 兼容统一使用 /v1/messages
     const url = `${this.baseUrl}/v1/messages`
     const response = await fetch(url, {
@@ -26,7 +32,7 @@ export class MinimaxEngine implements Engine {
         'Content-Type': 'application/json',
         'anthropic-version': '2023-06-01'
       },
-      body: JSON.stringify(request)
+      body: JSON.stringify(processedRequest)
     })
 
     // 处理响应

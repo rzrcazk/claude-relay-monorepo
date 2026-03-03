@@ -26,7 +26,7 @@ export class ProviderEngine {
     // 2. Anthropic 兼容供应商使用 MinimaxEngine
     if (provider.type === 'anthropic') {
       const minimaxEngine = new MinimaxEngine(apiKey.key, provider.baseUrl)
-      const result = await minimaxEngine.processRequest(request)
+      const result = await minimaxEngine.processRequest(request, selectedModel)
       return ResponseWrapper.wrap(result)
     }
 
