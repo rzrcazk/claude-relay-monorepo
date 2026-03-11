@@ -30,7 +30,9 @@ export class MinimaxEngine implements Engine {
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01'
+        'anthropic-version': '2023-06-01',
+        'User-Agent': 'Claude/1.0 (Claude Code)',
+        'X-Claude-Client': 'Claude-Code'
       },
       body: JSON.stringify(processedRequest)
     })

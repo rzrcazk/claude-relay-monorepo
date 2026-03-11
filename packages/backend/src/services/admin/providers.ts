@@ -383,7 +383,9 @@ AI Response:
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`,
-            'anthropic-version': '2023-06-01'
+            'anthropic-version': '2023-06-01',
+            'User-Agent': 'Claude/1.0 (Claude Code)',
+            'X-Claude-Client': 'Claude-Code'
           },
           body: JSON.stringify({
             model,
@@ -790,7 +792,9 @@ AI Response:
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
-        'anthropic-version': '2023-06-01'
+        'anthropic-version': '2023-06-01',
+        'User-Agent': 'Claude/1.0 (Claude Code)',
+        'X-Claude-Client': 'Claude-Code'
       },
       body: JSON.stringify(body)
     })
@@ -1107,7 +1111,9 @@ AI Response:
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
-        'anthropic-version': '2023-06-01'
+        'anthropic-version': '2023-06-01',
+        'User-Agent': 'Claude/1.0 (Claude Code)',
+        'X-Claude-Client': 'Claude-Code'
       },
       body: JSON.stringify(body)
     })
