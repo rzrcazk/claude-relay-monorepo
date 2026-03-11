@@ -223,7 +223,9 @@ export class ClaudeToModelScopeTransformer implements Transformer {
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': this.apiKey,
-        'anthropic-version': '2023-06-01'
+        'anthropic-version': '2023-06-01',
+        'User-Agent': 'Claude/1.0 (Claude Code)',
+        'X-Claude-Client': 'Claude-Code'
       },
       body: JSON.stringify(params)
     })
@@ -257,7 +259,9 @@ export class ClaudeToModelScopeTransformer implements Transformer {
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': this.apiKey,
-        'anthropic-version': '2023-06-01'
+        'anthropic-version': '2023-06-01',
+        'User-Agent': 'Claude/1.0 (Claude Code)',
+        'X-Claude-Client': 'Claude-Code'
       },
       body: JSON.stringify(params)
     })
